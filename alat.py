@@ -134,11 +134,33 @@ html, body, [class*="st-"], button, input, select, textarea {
     font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
 }
 .stApp { background: %(halaman)s; }
-header[data-testid="stHeader"] { background: transparent; height: 0; }
+/* Bilah atas dibuat bening, bukan disembunyikan. Tombol pembuka menu
+   samping tinggal di dalamnya — kalau bilahnya dihilangkan, tombolnya
+   ikut hilang dan pembaca kehilangan jalan ke halaman lain. */
+header[data-testid="stHeader"] { background: transparent; }
 #MainMenu, footer, [data-testid="stToolbar"] { visibility: hidden; }
 
+/* Tombol pembuka menu samping. Muncul di pojok kiri atas begitu menunya
+   ditutup. Dipaksa tampil dan diberi bingkai agar mudah terlihat. */
+/* stExpandSidebarButton adalah tombolnya sendiri, sedangkan
+   stSidebarCollapseButton adalah pembungkus berisi tombol. Keduanya
+   ditulis agar gayanya kena pada dua-duanya. */
+button[data-testid="stExpandSidebarButton"],
+[data-testid="stSidebarCollapseButton"] button {
+    visibility: visible !important; opacity: 1 !important;
+    background: %(latar)s !important; border: 1px solid %(garis)s !important;
+    border-radius: 10px !important; color: %(aksen)s !important;
+    box-shadow: 0 1px 3px rgba(16,24,40,0.12) !important;
+    width: 34px !important; height: 34px !important;
+}
+button[data-testid="stExpandSidebarButton"]:hover,
+[data-testid="stSidebarCollapseButton"] button:hover {
+    border-color: %(seri1)s !important; background: #f4f8fe !important;
+}
+button[data-testid="stExpandSidebarButton"] span { color: %(aksen)s !important; }
+
 [data-testid="stMainBlockContainer"] {
-    padding-top: 2.2rem; padding-bottom: 4rem;
+    padding-top: 1.2rem; padding-bottom: 4rem;
     max-width: 1500px;
 }
 
