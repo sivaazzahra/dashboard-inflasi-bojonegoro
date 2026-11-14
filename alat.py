@@ -278,8 +278,12 @@ def _deret_logo() -> str:
 
 def atur_halaman(judul: str) -> None:
     """Pengaturan dasar halaman, dipanggil paling awal di tiap halaman."""
+    # initial_sidebar_state="expanded" memaksa menu samping selalu terbuka.
+    # Tanpa ini Streamlit menyembunyikannya sendiri pada layar yang dianggap
+    # sempit, sehingga pembaca tidak menemukan halaman-halaman lainnya.
     st.set_page_config(page_title=f"{judul} — Dashboard BPS Bojonegoro",
-                       page_icon="📊", layout="wide")
+                       page_icon="📊", layout="wide",
+                       initial_sidebar_state="expanded")
     st.markdown(_GAYA, unsafe_allow_html=True)
 
     # Logo kecil di atas menu samping, muncul di semua halaman
