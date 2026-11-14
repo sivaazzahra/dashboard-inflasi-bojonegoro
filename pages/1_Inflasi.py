@@ -13,7 +13,7 @@ import plotly.graph_objects as go
 import streamlit as st
 
 from alat import (WARNA, angka, atur_halaman, bacaan, bagian, gaya,
-                  gaya_titik, kartu, kepala, muat_inflasi, nama_bulan,
+                  gaya_titik, kartu, kepala, muat_inflasi, navigasi, nama_bulan,
                   periksa_data, persen, sumber)
 
 atur_halaman("Inflasi")
@@ -51,6 +51,7 @@ kepala("Inflasi Kabupaten Bojonegoro",
        "Seberapa cepat harga naik, dan dari kelompok pengeluaran mana "
        "kenaikan itu berasal.",
        f"Disorot: {nama_bulan(t_sorot)} · rentang grafik {awal} – {akhir}")
+navigasi()
 
 # --------------------------------------------------------------------------
 # Ringkasan angka

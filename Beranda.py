@@ -13,7 +13,7 @@ di menu sebelah kiri, berurutan sesuai angka di depan namanya.
 import streamlit as st
 
 from alat import (atur_halaman, bacaan, bagian, kartu, kepala, muat_harga,
-                  muat_inflasi, muat_jembatan, nama_bulan, periksa_data,
+                  muat_inflasi, navigasi, muat_jembatan, nama_bulan, periksa_data,
                   persen, sumber)
 
 atur_halaman("Beranda")
@@ -35,6 +35,7 @@ kepala(
     "pemantauan harga pasar harian",
     f"Data inflasi sampai {nama_bulan(terakhir['periode'])} · "
     f"harga pangan sampai {nama_bulan(pangan_terakhir)}")
+navigasi()
 
 # --------------------------------------------------------------------------
 # Angka utama

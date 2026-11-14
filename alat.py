@@ -166,6 +166,15 @@ header[data-testid="stHeader"] { background: transparent; height: 0; }
     font-size: 0.76rem; font-weight: 500; color: #fff;
 }
 
+/* Tautan antarhalaman */
+[data-testid="stPageLink"] a {
+    background: %(latar)s; border: 1px solid %(garis)s; border-radius: 10px;
+    padding: 9px 12px; justify-content: center;
+    box-shadow: 0 1px 2px rgba(16,24,40,0.04);
+}
+[data-testid="stPageLink"] a:hover { border-color: %(seri1)s; background: #f4f8fe; }
+[data-testid="stPageLink"] a p { font-weight: 600; font-size: 0.86rem; color: %(aksen)s; }
+
 /* Judul bagian */
 .bagian { margin: 30px 0 12px 0; }
 .bagian .mata {
@@ -299,6 +308,26 @@ def kepala(judul: str, penjelasan: str, lencana: str = "") -> None:
         f'<div class="kepala">{_deret_logo()}<h1>{judul}</h1>'
         f'<p>{penjelasan}</p>{tambahan}</div>',
         unsafe_allow_html=True)
+
+
+# Daftar halaman, dipakai untuk tautan antarhalaman di badan halaman.
+# Jalurnya dihitung dari berkas pintu masuk, yaitu Beranda.py.
+HALAMAN = [("Beranda.py", "Beranda"),
+           ("pages/1_Inflasi.py", "Inflasi"),
+           ("pages/2_Harga_Pangan.py", "Harga Pangan"),
+           ("pages/3_Peramalan.py", "Peramalan")]
+
+
+def navigasi() -> None:
+    """Deretan tautan antarhalaman, dipasang di bawah kepala tiap halaman.
+
+    Menu samping Streamlit menyembunyikan dirinya sendiri pada layar yang
+    dianggap sempit, dan pembaca yang baru pertama membuka dashboard belum
+    tentu menemukannya. Tautan di badan halaman membuat seluruh halaman
+    selalu terjangkau, apa pun ukuran layarnya.
+    """
+    for kolom, (berkas, label) in zip(st.columns(len(HALAMAN)), HALAMAN):
+        kolom.page_link(berkas, label=label, use_container_width=True)
 
 
 def bagian(mata: str, judul: str, penjelasan: str = "") -> None:

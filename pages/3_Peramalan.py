@@ -27,7 +27,7 @@ import plotly.graph_objects as go
 import streamlit as st
 
 from alat import (WARNA, angka, atur_halaman, bacaan, bagian, gaya,
-                  gaya_titik, kartu, kepala, muat_harga, nama_bulan,
+                  gaya_titik, kartu, kepala, muat_harga, navigasi, nama_bulan,
                   periksa_data, rupiah, sumber)
 
 # statsmodels gemar memperingatkan soal konvergensi pada deret pendek.
@@ -233,6 +233,7 @@ kepala("Peramalan Harga Komoditas",
        "dasar untuk memercayainya.",
        f"{komoditas} · tiga metode dibandingkan · "
        f"diuji pada {PANJANG_UJI} bulan terakhir")
+navigasi()
 
 # --------------------------------------------------------------------------
 # Ringkasan angka

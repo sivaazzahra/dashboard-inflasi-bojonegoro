@@ -18,7 +18,7 @@ import plotly.graph_objects as go
 import streamlit as st
 
 from alat import (WARNA, angka, atur_halaman, bacaan, bagian, gaya,
-                  gaya_titik, kartu, kepala, muat_harga, muat_jembatan,
+                  gaya_titik, kartu, kepala, muat_harga, navigasi, muat_jembatan,
                   nama_bulan, periksa_data, persen, rupiah, sumber, BULAN_ID)
 
 atur_halaman("Harga Pangan")
@@ -63,6 +63,7 @@ kepala("Harga Pangan di Pasar Bojonegoro",
        "penggerak di balik angka inflasi kelompok makanan.",
        f"{harga.komoditas.nunique()} komoditas · "
        f"{harga.periode.nunique()} bulan · sampai {nama_bulan(bulan_akhir)}")
+navigasi()
 
 # --------------------------------------------------------------------------
 # Ringkasan angka
