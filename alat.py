@@ -133,7 +133,15 @@ _GAYA = """
 html, body, [class*="st-"], button, input, select, textarea {
     font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
 }
-.stApp { background: %(halaman)s; }
+/* Ikon bawaan Streamlit (panah menu samping, panah expander) digambar dari
+   huruf khusus bernama Material Symbols. Aturan huruf di atas ikut menimpanya,
+   sehingga ikon muncul sebagai tulisan "keyboard_double_arrow_left". Baris
+   ini mengembalikan hurufnya. */
+[data-testid="stIconMaterial"], .material-symbols-rounded,
+.material-symbols-outlined {
+    font-family: "Material Symbols Rounded", "Material Symbols Outlined" !important;
+}
+.stApp { background: linear-gradient(180deg, #e6eefa 0px, %(halaman)s 560px); }
 /* Bilah atas dibuat bening, bukan disembunyikan. Tombol pembuka menu
    samping tinggal di dalamnya — kalau bilahnya dihilangkan, tombolnya
    ikut hilang dan pembaca kehilangan jalan ke halaman lain. */
@@ -188,6 +196,33 @@ button[data-testid="stExpandSidebarButton"] span { color: %(aksen)s !important; 
     font-size: 0.76rem; font-weight: 500; color: #fff;
 }
 
+.kepala { position: relative; overflow: hidden; min-height: 190px;
+    box-shadow: 0 6px 22px rgba(18,58,107,0.22); }
+.kepala h1, .kepala p { text-shadow: 0 1px 6px rgba(0,0,0,0.35); }
+
+/* Kotak temuan: daftar insight yang dihitung dari data */
+.wawasan {
+    background: %(latar)s; border: 1px solid %(garis)s;
+    border-left: 4px solid %(seri2)s; border-radius: 12px;
+    padding: 15px 20px 10px 20px; margin: 10px 0 4px 0;
+    box-shadow: 0 1px 2px rgba(16,24,40,0.04);
+}
+.wawasan .judul {
+    font-size: 0.7rem; font-weight: 700; letter-spacing: 0.1em;
+    text-transform: uppercase; color: %(seri2)s; margin-bottom: 8px;
+}
+.wawasan ul { margin: 0; padding-left: 18px; }
+.wawasan li { font-size: 0.88rem; color: %(tinta)s; line-height: 1.65; margin-bottom: 6px; }
+.wawasan li b { color: %(aksen)s; }
+
+/* Kotak penjelasan istilah */
+.istilah {
+    background: #f4f8fe; border: 1px dashed #b9d0ee; border-radius: 12px;
+    padding: 14px 18px; margin: 8px 0; font-size: 0.87rem;
+    color: %(tinta)s; line-height: 1.65;
+}
+.istilah b { color: %(aksen)s; }
+
 /* Tautan antarhalaman */
 [data-testid="stPageLink"] a {
     background: %(latar)s; border: 1px solid %(garis)s; border-radius: 10px;
@@ -238,7 +273,7 @@ button[data-testid="stExpandSidebarButton"] span { color: %(aksen)s !important; 
 /* Bungkus grafik */
 [data-testid="stPlotlyChart"] {
     background: %(latar)s; border: 1px solid %(garis)s; border-radius: 14px;
-    padding: 10px 8px 4px 8px;
+    padding: 0; overflow: hidden;
     box-shadow: 0 1px 2px rgba(16,24,40,0.04);
 }
 
@@ -323,13 +358,41 @@ def atur_halaman(judul: str) -> None:
         st.logo(str(utama), size="large")
 
 
-def kepala(judul: str, penjelasan: str, lencana: str = "") -> None:
-    """Kepala halaman berlatar biru, dengan logo bila tersedia."""
+def kepala(judul: str, penjelasan: str, lencana: str = "",
+           latar: str = "") -> None:
+    """Kepala halaman berlatar biru, dengan logo dan gambar latar bila ada.
+
+    `latar` adalah nama berkas di folder aset/ tanpa perluasan, misalnya
+    "latar_beranda". Gambar diberi lapisan biru tua di sisi kiri supaya
+    tulisan tetap terbaca. Bila berkasnya tidak ada, kepala tampil polos.
+    """
     tambahan = f'<div class="lencana">{lencana}</div>' if lencana else ""
+    gambar = berkas_logo(latar) if latar else None
+    gaya_latar = (
+        'style="background-image: linear-gradient(100deg, '
+        'rgba(18,58,107,0.96) 0%, rgba(18,58,107,0.84) 48%, '
+        f'rgba(29,90,168,0.40) 100%), url(\'{gambar}\'); '
+        'background-size: cover; background-position: center;"'
+        if gambar else "")
     st.markdown(
-        f'<div class="kepala">{_deret_logo()}<h1>{judul}</h1>'
+        f'<div class="kepala" {gaya_latar}>{_deret_logo()}<h1>{judul}</h1>'
         f'<p>{penjelasan}</p>{tambahan}</div>',
         unsafe_allow_html=True)
+
+
+def wawasan(judul: str, butir: list) -> None:
+    """Kotak berisi beberapa temuan singkat. Setiap butir adalah HTML satu
+    kalimat; semuanya dihitung dari data sehingga ikut berubah saat
+    penyaring diganti."""
+    isi = "".join(f"<li>{b}</li>" for b in butir)
+    st.markdown(
+        f'<div class="wawasan"><div class="judul">{judul}</div>'
+        f'<ul>{isi}</ul></div>', unsafe_allow_html=True)
+
+
+def istilah(teks: str) -> None:
+    """Kotak penjelasan istilah teknis dalam bahasa sehari-hari."""
+    st.markdown(f'<div class="istilah">{teks}</div>', unsafe_allow_html=True)
 
 
 # Daftar halaman, dipakai untuk tautan antarhalaman di badan halaman.
@@ -407,7 +470,7 @@ def gaya(fig, tinggi: int = 360):
     """
     fig.update_layout(
         height=tinggi,
-        margin=dict(l=8, r=12, t=8, b=8),
+        margin=dict(l=12, r=16, t=16, b=10),
         plot_bgcolor=WARNA["latar"],
         paper_bgcolor=WARNA["latar"],
         font=dict(family="Plus Jakarta Sans, system-ui, sans-serif",

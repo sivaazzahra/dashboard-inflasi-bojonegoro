@@ -12,9 +12,9 @@ di menu sebelah kiri, berurutan sesuai angka di depan namanya.
 
 import streamlit as st
 
-from alat import (atur_halaman, bacaan, bagian, kartu, kepala, muat_harga,
+from alat import (angka, atur_halaman, bacaan, bagian, kartu, kepala, muat_harga,
                   muat_inflasi, navigasi, muat_jembatan, nama_bulan, periksa_data,
-                  persen, sumber)
+                  persen, sumber, wawasan)
 
 atur_halaman("Beranda")
 
@@ -34,7 +34,8 @@ kepala(
     "Kabupaten Bojonegoro · menggabungkan statistik inflasi resmi BPS dengan "
     "pemantauan harga pasar harian",
     f"Data inflasi sampai {nama_bulan(terakhir['periode'])} · "
-    f"harga pangan sampai {nama_bulan(pangan_terakhir)}")
+    f"harga pangan sampai {nama_bulan(pangan_terakhir)}",
+    latar="latar_beranda")
 navigasi()
 
 # --------------------------------------------------------------------------
@@ -67,6 +68,62 @@ bacaan(
       f"{penyumbang['kelompok']}. Karena itulah dashboard ini menaruh "
       "perhatian khusus pada harga pangan: di situ sebagian besar tekanan "
       "harga di Bojonegoro terbentuk.")
+
+# --------------------------------------------------------------------------
+# Temuan utama — semuanya dihitung dari data, bukan ditulis tetap
+# --------------------------------------------------------------------------
+sebelumnya = umum.iloc[-2]
+arah = "naik" if terakhir["inflasi_yoy"] > sebelumnya["inflasi_yoy"] else "turun"
+tertinggi_yoy = umum.loc[umum["inflasi_yoy"].idxmax()]
+terendah_yoy = umum.loc[umum["inflasi_yoy"].idxmin()]
+bulan_deflasi = int((umum["inflasi_mom"] < 0).sum())
+
+rinci_akhir = inflasi[(inflasi["periode"] == terakhir["periode"])
+                      & (~inflasi["adalah_umum"])]
+paling_tinggi = rinci_akhir.sort_values("inflasi_yoy", ascending=False).iloc[0]
+
+pangan_kini = harga[(harga["periode"] == pangan_terakhir) & (harga["pangan"])]
+naik_waspada = pangan_kini[pangan_kini["status"] == "Waspada naik"]
+sah = jembatan.dropna(subset=["harga_pangan_mom", "inflasi_makanan_mom"])
+r = float(sah["harga_pangan_mom"].corr(sah["inflasi_makanan_mom"]))
+
+if paling_tinggi["kelompok"] == penyumbang["kelompok"]:
+    kalimat_kelompok = "sekaligus penyumbang terbesar."
+else:
+    kalimat_kelompok = (
+        f"tetapi penyumbang terbesarnya justru <b>{penyumbang['kelompok_pendek']}</b>, "
+        "karena bobot belanjanya jauh lebih besar. Laju kenaikan dan "
+        "sumbangan ke inflasi umum adalah dua hal yang berbeda.")
+
+if len(naik_waspada):
+    terjauh = naik_waspada.sort_values("simpangan_pct").iloc[-1]["komoditas"]
+    kalimat_waspada = f", paling jauh menyimpang: <b>{terjauh}</b>."
+else:
+    kalimat_waspada = "."
+
+butir = [
+    f"Inflasi tahunan <b>{arah}</b> dari {persen(sebelumnya['inflasi_yoy'])} "
+    f"({nama_bulan(sebelumnya['periode'])}) menjadi "
+    f"<b>{persen(terakhir['inflasi_yoy'])}</b>. Titik tertingginya sepanjang "
+    f"data {persen(tertinggi_yoy['inflasi_yoy'])} pada "
+    f"{nama_bulan(tertinggi_yoy['periode'])}, terendahnya "
+    f"{persen(terendah_yoy['inflasi_yoy'])} pada "
+    f"{nama_bulan(terendah_yoy['periode'])}.",
+    f"Dari {len(umum)} bulan yang tercatat, <b>{bulan_deflasi} bulan</b> "
+    "mengalami penurunan harga bulanan (deflasi). Inflasi di Bojonegoro "
+    "tidak naik lurus, melainkan bergelombang.",
+    f"Kelompok dengan inflasi tahunan tertinggi adalah "
+    f"<b>{paling_tinggi['kelompok_pendek']}</b> "
+    f"({persen(paling_tinggi['inflasi_yoy'])}), " + kalimat_kelompok,
+    f"Di pasar, <b>{len(naik_waspada)} dari {len(pangan_kini)}</b> komoditas "
+    f"pangan berstatus <i>waspada naik</i> pada "
+    f"{nama_bulan(pangan_terakhir)}" + kalimat_waspada,
+    f"Harga pasar dan inflasi makanan resmi bergerak searah (korelasi "
+    f"<b>{angka(r, 2, tanda=True)}</b>), sehingga harga harian layak dipakai "
+    "sebagai penanda dini sebelum angka BPS terbit.",
+]
+bagian("Temuan", "Apa yang bisa dibaca dari data ini")
+wawasan("Temuan utama", butir)
 
 # --------------------------------------------------------------------------
 # Isi dashboard

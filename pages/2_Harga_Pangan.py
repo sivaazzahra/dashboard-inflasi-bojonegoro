@@ -19,7 +19,8 @@ import streamlit as st
 
 from alat import (WARNA, angka, atur_halaman, bacaan, bagian, gaya,
                   gaya_titik, kartu, kepala, muat_harga, navigasi, muat_jembatan,
-                  nama_bulan, periksa_data, persen, rupiah, sumber, BULAN_ID)
+                  nama_bulan, periksa_data, persen, rupiah, sumber, BULAN_ID,
+                  wawasan, istilah)
 
 atur_halaman("Harga Pangan")
 
@@ -62,7 +63,8 @@ kepala("Harga Pangan di Pasar Bojonegoro",
        "Harga komoditas pokok yang dipantau harian, diringkas per bulan — "
        "penggerak di balik angka inflasi kelompok makanan.",
        f"{harga.komoditas.nunique()} komoditas · "
-       f"{harga.periode.nunique()} bulan · sampai {nama_bulan(bulan_akhir)}")
+       f"{harga.periode.nunique()} bulan · sampai {nama_bulan(bulan_akhir)}",
+       latar="latar_harga")
 navigasi()
 
 # --------------------------------------------------------------------------
@@ -119,6 +121,25 @@ bacaan(
       f"periode ini {rupiah(satu['harga'].max())}, terendah "
       f"{rupiah(satu['harga'].min())}.")
 
+bln_tinggi = satu.loc[satu["harga"].idxmax(), "periode"]
+bln_rendah = satu.loc[satu["harga"].idxmin(), "periode"]
+cv = satu["harga"].std() / satu["harga"].mean() * 100
+selisih_normal = baris_akhir["simpangan_pct"]
+butir = [
+    f"Harga tertinggi pertama kali tercapai pada <b>{nama_bulan(bln_tinggi)}</b> "
+    f"dan terendah pada <b>{nama_bulan(bln_rendah)}</b>. Harga tertinggi itu "
+    f"{angka((satu['harga'].max() / satu['harga'].min() - 1) * 100, 1)}% lebih "
+    "mahal daripada yang terendah.",
+    f"Harga bulan terakhir berada <b>{angka(abs(selisih_normal), 1)}% "
+    f"{'di atas' if selisih_normal >= 0 else 'di bawah'}</b> rata-rata 12 "
+    f"bulannya, berstatus <b>{baris_akhir['status']}</b>.",
+    f"Sebaran harga ({angka(cv, 1)}% dari rata-ratanya) tergolong "
+    + ("kecil, harganya relatif stabil." if cv < 10
+       else "sedang, ada naik-turun yang cukup terasa." if cv < 25
+       else "besar, harganya mudah melonjak.")
+]
+wawasan("Temuan", butir)
+
 # --------------------------------------------------------------------------
 # 2. Peringkat gejolak
 # --------------------------------------------------------------------------
@@ -161,6 +182,22 @@ else:
     st.caption(f"{komoditas} tidak masuk dua belas besar — gejolaknya "
                f"{angka(nilai, 1)}%, peringkat ke-{urutan_ke} dari "
                f"{len(semua_peringkat)} komoditas.")
+
+kelompok_gejolak = (sumber_pilihan.drop_duplicates("komoditas")
+                    .groupby("kelompok")["volatilitas_pct"].mean()
+                    .sort_values(ascending=False))
+wawasan("Temuan", [
+    f"Kelompok dengan harga paling bergejolak rata-rata adalah "
+    f"<b>{kelompok_gejolak.index[0]}</b> ({angka(kelompok_gejolak.iloc[0], 1)}%), "
+    f"yang paling tenang <b>{kelompok_gejolak.index[-1]}</b> "
+    f"({angka(kelompok_gejolak.iloc[-1], 1)}%).",
+    f"Komoditas termudah berubah adalah <b>{semua_peringkat.loc[0, 'komoditas']}</b> "
+    f"({angka(semua_peringkat.loc[0, 'volatilitas_pct'], 1)}%), sedangkan yang "
+    f"paling stabil <b>{semua_peringkat.loc[len(semua_peringkat) - 1, 'komoditas']}</b> "
+    f"({angka(semua_peringkat.loc[len(semua_peringkat) - 1, 'volatilitas_pct'], 1)}%). "
+    "Perbedaan ini yang membuat ramalan harga sebagian komoditas jauh lebih "
+    "sulit daripada yang lain.",
+])
 
 # --------------------------------------------------------------------------
 # 3. Pola musiman
@@ -256,13 +293,24 @@ with kanan:
           kecil=True)
 
 bacaan(
-    f"Korelasinya <b>{angka(r, 3, tanda=True)}</b> dan tergolong kuat. "
+    f"Korelasinya <b>{angka(r, 3, tanda=True)}</b> dan tergolong "
+    f"<b>{'kuat' if abs(r) >= 0.7 else 'sedang' if abs(r) >= 0.4 else 'lemah'}</b>. "
     f"Artinya data harga pasar Disperindag memang bergerak searah dengan "
     "inflasi kelompok makanan versi BPS, sehingga layak dipakai sebagai "
     "penanda dini. Satu catatan penting: hubungan ini bersifat "
     "<b>bersamaan waktu</b>, bukan mendahului. Harga pasar tidak meramalkan "
     "inflasi bulan depan, tetapi memberi gambaran inflasi bulan berjalan "
     "jauh sebelum angka resminya terbit.")
+
+# Contoh nyata untuk menjelaskan keterkaitan
+sama_arah = int(((v["harga_pangan_mom"] > 0) == (v["inflasi_makanan_mom"] > 0)).sum())
+istilah(
+    f"<b>Cara membaca R².</b> Nilai {angka(r ** 2 * 100, 1)}% berarti sekitar "
+    f"{angka(r ** 2 * 100, 0)} dari tiap 100 bagian naik-turunnya inflasi "
+    "makanan BPS bisa dijelaskan oleh pergerakan harga pasar. Sisanya berasal "
+    "dari hal yang tidak terpantau di data harga ini, seperti komoditas lain "
+    f"dan perbedaan cara hitung. Pada {len(v)} bulan, kedua angka searah "
+    f"(sama-sama naik atau sama-sama turun) di <b>{sama_arah} bulan</b>.")
 
 # --------------------------------------------------------------------------
 # 5. Tabel status

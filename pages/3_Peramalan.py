@@ -28,7 +28,7 @@ import streamlit as st
 
 from alat import (WARNA, angka, atur_halaman, bacaan, bagian, gaya,
                   gaya_titik, kartu, kepala, muat_harga, navigasi, nama_bulan,
-                  periksa_data, rupiah, sumber)
+                  periksa_data, rupiah, sumber, wawasan, istilah)
 
 # statsmodels gemar memperingatkan soal konvergensi pada deret pendek.
 # Peringatan itu tidak mengubah hasil, jadi disenyapkan agar tidak
@@ -227,12 +227,17 @@ kolom_harga = deret.columns[-1]
 ukuran = hasil["ukuran"]
 ramalan = hasil["ramalan"]
 terbaik = ukuran.iloc[0]
+# Metode yang benar-benar dipakai meramal bisa berbeda dari peringkat 1: bila
+# pembanding naif menang, ramalan memakai metode terbaik kedua. Angka ketepatan
+# yang ditampilkan di samping ramalan harus milik metode yang dipakai itu.
+dipakai = ukuran[ukuran["Metode"] == hasil["metode_ramalan"]].iloc[0]
 
 kepala("Peramalan Harga Komoditas",
        "Ramalan beberapa bulan ke depan, beserta pengujian yang menjadi "
        "dasar untuk memercayainya.",
        f"{komoditas} · tiga metode dibandingkan · "
-       f"diuji pada {PANJANG_UJI} bulan terakhir")
+       f"diuji pada {PANJANG_UJI} bulan terakhir",
+       latar="latar_peramalan")
 navigasi()
 
 # --------------------------------------------------------------------------
@@ -246,7 +251,7 @@ k1, k2, k3, k4 = st.columns(4)
 kartu(k1, "Metode terpilih", hasil["metode_ramalan"],
       hasil["ordo"] if hasil["metode_ramalan"] == "SARIMA"
       else "galat, tren, dan musiman aditif", kecil=True)
-kartu(k2, "MAPE pada data uji", angka(terbaik["MAPE"], 2) + "%",
+kartu(k2, "MAPE pada data uji", angka(dipakai["MAPE"], 2) + "%",
       f"rata-rata meleset sebesar itu dari harga sebenarnya "
       f"selama {PANJANG_UJI} bulan uji")
 kartu(k3, f"Harga kini ({nama_bulan(deret['periode'].iloc[-1])})",
@@ -294,11 +299,38 @@ tampil = ukuran.copy()
 tampil["RMSE"] = tampil["RMSE"].map(rupiah)
 tampil["MAE"] = tampil["MAE"].map(rupiah)
 tampil["MAPE"] = tampil["MAPE"].map(lambda v: angka(v, 2) + "%")
+tampil = tampil.rename(columns={"RMSE": "RMSE (Rp)", "MAE": "MAE (Rp)",
+                                "MAPE": "MAPE (%)"})
 tampil.insert(0, "Peringkat", range(1, len(tampil) + 1))
 st.dataframe(tampil, use_container_width=True, hide_index=True)
 st.caption("RMSE dan MAE bersatuan rupiah sehingga hanya berlaku untuk "
            "komoditas ini. MAPE bersatuan persen sehingga bisa dibandingkan "
            "antarkomoditas — karena itu pemenang ditentukan dengan MAPE.")
+
+# Penjelasan satuan rupiah, dengan angka metode terbaik sebagai contoh
+mae_b, rmse_b = terbaik["MAE"], terbaik["RMSE"]
+rasio = rmse_b / mae_b if mae_b else 1.0
+istilah(
+    "<b>Kenapa RMSE dan MAE bersatuan rupiah?</b> Karena keduanya dihitung "
+    "langsung dari selisih antara harga sebenarnya dan harga ramalan, dan "
+    "selisih dua harga satuannya tetap rupiah. "
+    f"<br>• <b>MAE</b> adalah rata-rata selisih tanpa memandang arah. Untuk "
+    f"{komoditas}, metode peringkat pertama ({terbaik['Metode']}) rata-rata "
+    f"meleset <b>{rupiah(mae_b)}</b> "
+    "dari harga sebenarnya. "
+    f"<br>• <b>RMSE</b> mengkuadratkan selisih, merata-ratakannya, lalu "
+    "diakarkan agar kembali ke rupiah. Kuadrat membuat meleset yang besar "
+    f"dihukum lebih berat; nilainya {rupiah(rmse_b)}. "
+    f"<br>• RMSE selalu sama dengan atau lebih besar dari MAE. Perbandingan "
+    f"keduanya di sini <b>{angka(rasio, 2)}×</b>: "
+    + ("hampir sama, jadi kesalahannya merata tiap bulan."
+       if rasio < 1.25 else
+       "cukup jauh, artinya ada beberapa bulan yang melesetnya jauh lebih "
+       "besar dari bulan lain.")
+    + "<br><b>Kelemahannya:</b> angka rupiah tidak adil dibandingkan antar "
+      "komoditas. Meleset Rp 500 pada beras yang Rp 14.000 jauh lebih kecil "
+      "artinya daripada pada komoditas yang Rp 2.000. Karena itu pemenang "
+      "ditentukan dengan <b>MAPE</b>, yang berupa persen.")
 
 naif = ukuran[ukuran["Metode"] == "Naif musiman"]["MAPE"].iloc[0]
 lebih_baik = naif - terbaik["MAPE"]
@@ -319,6 +351,22 @@ else:
         f"jadi model ini <b>{angka(lebih_baik, 2)} poin lebih baik</b> "
         "daripada sekadar menyalin harga tahun lalu — itulah bukti bahwa "
         "pemodelannya memang memberi nilai tambah.")
+
+n_model = len(ukuran) - 1                      # di luar pembanding naif
+n_kalah = int(((ukuran["MAPE"] > naif)
+               & (ukuran["Metode"] != "Naif musiman")).sum())
+layak = dipakai["MAPE"] < 10
+wawasan("Temuan", [
+    f"Dari {n_model} metode pemodelan, <b>{n_kalah}</b> kalah tepat dibanding "
+    "pembanding naif musiman. Kalau pemodelan tidak mengalahkan "
+    "pembanding ini, kerumitannya tidak ada gunanya.",
+    f"Metode yang dipakai meramal ({hasil['metode_ramalan']}) mencatat MAPE "
+    f"<b>{angka(dipakai['MAPE'], 2)}%</b> pada data uji, "
+    + ("di bawah ambang 10%, sehingga ramalannya layak dipakai sebagai "
+       "gambaran arah." if layak else
+       "di atas ambang 10%, sehingga ramalannya sebaiknya dipakai hati-hati "
+       "dan hanya untuk satu-dua bulan ke depan."),
+])
 
 # --------------------------------------------------------------------------
 # 2. Ramalan ke depan
@@ -372,6 +420,21 @@ bacaan(
       "dibaca sebagai peringatan: makin jauh ke depan, makin tidak pasti. "
       "Ramalan satu sampai tiga bulan jauh lebih bisa dipegang daripada "
       "ramalan dua belas bulan.")
+
+bln_puncak = ramalan.loc[ramalan["ramalan"].idxmax()]
+bln_dasar = ramalan.loc[ramalan["ramalan"].idxmin()]
+wawasan("Temuan", [
+    f"Harga ramalan tertinggi jatuh pada <b>{nama_bulan(bln_puncak['periode'])}</b> "
+    f"({rupiah(bln_puncak['ramalan'])}) dan terendah pada "
+    f"<b>{nama_bulan(bln_dasar['periode'])}</b> ({rupiah(bln_dasar['ramalan'])}).",
+    f"Pada bulan terakhir, harga diperkirakan berada antara "
+    f"<b>{rupiah(ramalan['bawah'].iloc[-1])}</b> dan "
+    f"<b>{rupiah(ramalan['atas'].iloc[-1])}</b>. Rentang selebar itu adalah "
+    "ukuran ketidakpastian yang jujur, bukan kelemahan tampilan.",
+    "Ramalan memakai pola masa lalu. Jika menjelang hari besar atau musim "
+    "tanam pola itu berubah, angkanya perlu dibaca bersama informasi "
+    "lapangan.",
+])
 
 # --------------------------------------------------------------------------
 # 3. Tabel ramalan

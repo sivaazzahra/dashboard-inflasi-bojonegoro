@@ -82,7 +82,7 @@ dashboard-bps/
 ├── siapkan_data.py         # ETL: data mentah menjadi data siap pakai
 ├── requirements.txt
 ├── .streamlit/config.toml
-├── aset/                   # logo
+├── aset/                   # logo dan gambar latar banner (latar_*.jpg)
 ├── pages/
 │   ├── 1_Inflasi.py
 │   ├── 2_Harga_Pangan.py
