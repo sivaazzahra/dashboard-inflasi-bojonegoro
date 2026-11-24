@@ -278,7 +278,6 @@ button[data-testid="stExpandSidebarButton"] span { color: %(aksen)s !important; 
 }
 
 /* Menu samping */
-[data-testid="stSidebar"] { background: %(latar)s; border-right: 1px solid %(garis)s; }
 [data-testid="stSidebar"] h3 {
     font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase;
     color: %(redup)s; font-weight: 700;
@@ -295,6 +294,20 @@ button[data-testid="stExpandSidebarButton"] span { color: %(aksen)s !important; 
     font-size: 0.76rem; color: %(redup)s; margin-top: 26px;
     padding-top: 14px; border-top: 1px solid %(garis)s; line-height: 1.6;
 }
+/* Ikon menu samping, digambar dengan CSS supaya tidak butuh berkas gambar */
+[data-testid="stSidebarNav"] a { border-radius: 10px; padding: 8px 10px; gap: 10px; }
+[data-testid="stSidebarNav"] a::before { content: ''; width: 20px; height: 20px; flex: none; background-color: currentColor; -webkit-mask: var(--ikon) center/contain no-repeat; mask: var(--ikon) center/contain no-repeat; }
+[data-testid="stSidebarNav"] li:nth-child(1) a { --ikon: url("data:image/svg+xml,%%3Csvg%%20xmlns=%%27http://www.w3.org/2000/svg%%27%%20viewBox=%%270%%200%%2024%%2024%%27%%20fill=%%27none%%27%%20stroke=%%27black%%27%%20stroke-width=%%272%%27%%20stroke-linecap=%%27round%%27%%20stroke-linejoin=%%27round%%27%%3E%%3Cpath%%20d=%%27M3%%2011l9-8%%209%%208%%27/%%3E%%3Cpath%%20d=%%27M5%%2010v10h5v-6h4v6h5V10%%27/%%3E%%3C/svg%%3E"); }
+[data-testid="stSidebarNav"] li:nth-child(2) a { --ikon: url("data:image/svg+xml,%%3Csvg%%20xmlns=%%27http://www.w3.org/2000/svg%%27%%20viewBox=%%270%%200%%2024%%2024%%27%%20fill=%%27none%%27%%20stroke=%%27black%%27%%20stroke-width=%%272%%27%%20stroke-linecap=%%27round%%27%%20stroke-linejoin=%%27round%%27%%3E%%3Cpath%%20d=%%27M3%%2017l6-6%%204%%204%%208-9%%27/%%3E%%3Cpath%%20d=%%27M15%%206h6v6%%27/%%3E%%3C/svg%%3E"); }
+[data-testid="stSidebarNav"] li:nth-child(3) a { --ikon: url("data:image/svg+xml,%%3Csvg%%20xmlns=%%27http://www.w3.org/2000/svg%%27%%20viewBox=%%270%%200%%2024%%2024%%27%%20fill=%%27none%%27%%20stroke=%%27black%%27%%20stroke-width=%%272%%27%%20stroke-linecap=%%27round%%27%%20stroke-linejoin=%%27round%%27%%3E%%3Cpath%%20d=%%27M3%%205h2l2%%2011h11l2-8H6%%27/%%3E%%3Ccircle%%20cx=%%279%%27%%20cy=%%2720%%27%%20r=%%271.5%%27/%%3E%%3Ccircle%%20cx=%%2717%%27%%20cy=%%2720%%27%%20r=%%271.5%%27/%%3E%%3C/svg%%3E"); }
+[data-testid="stSidebarNav"] li:nth-child(4) a { --ikon: url("data:image/svg+xml,%%3Csvg%%20xmlns=%%27http://www.w3.org/2000/svg%%27%%20viewBox=%%270%%200%%2024%%2024%%27%%20fill=%%27none%%27%%20stroke=%%27black%%27%%20stroke-width=%%272%%27%%20stroke-linecap=%%27round%%27%%20stroke-linejoin=%%27round%%27%%3E%%3Cpath%%20d=%%27M3%%203v18h18%%27/%%3E%%3Cpath%%20d=%%27M7%%2015l4-5%%203%%203%%205-6%%27%%20stroke-dasharray=%%272%%203%%27/%%3E%%3C/svg%%3E"); }
+
+/* Menu samping berlatar biru */
+[data-testid="stSidebar"] { background: linear-gradient(180deg, #123a6b 0%%, #1d5aa8 100%%); border-right: none; }
+[data-testid="stSidebar"] * { color: #fff; }
+[data-testid="stSidebarNav"] a:hover { background: rgba(255,255,255,0.12); }
+[data-testid="stSidebarNav"] a[aria-current="page"] { background: #2a78d6; font-weight: 600; box-shadow: 0 1px 3px rgba(0,0,0,0.25); }
+[data-testid="stSidebar"] img { background: #fff; border-radius: 10px; padding: 5px 8px; }
 </style>
 """ % WARNA
 
