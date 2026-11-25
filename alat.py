@@ -334,6 +334,13 @@ button[data-testid="stExpandSidebarButton"] span { color: %(aksen)s !important; 
 [data-testid="stSidebar"] [data-baseweb="select"] *, [data-testid="stSidebar"] [data-baseweb="select"] input,
 [data-testid="stSidebar"] [data-baseweb="select"] svg { color: #101828 !important; fill: #101828 !important; -webkit-text-fill-color: #101828 !important; opacity: 1 !important; }
 [data-testid="stSidebar"] [data-baseweb="select"] input::placeholder { color: #667085 !important; -webkit-text-fill-color: #667085 !important; }
+/* Streamlit versi baru memakai react-aria (bukan baseweb) untuk kotak pilihan */
+[data-testid="stSidebar"] [data-testid="stSelectbox"] [role="group"], [data-testid="stSidebar"] [data-testid="stMultiSelect"] [role="group"] { background: #fff; border-radius: 10px; }
+[data-testid="stSidebar"] [data-testid="stSelectbox"] input, [data-testid="stSidebar"] [data-testid="stMultiSelect"] input,
+[data-testid="stSidebar"] input[role="combobox"] { color: #101828 !important; -webkit-text-fill-color: #101828 !important; opacity: 1 !important; background: transparent !important; }
+[data-testid="stSidebar"] [data-testid="stSelectbox"] button, [data-testid="stSidebar"] [data-testid="stSelectbox"] button svg,
+[data-testid="stSidebar"] [data-testid="stMultiSelect"] button svg { color: #101828 !important; fill: #101828 !important; }
+[data-testid="stSidebar"] [data-testid="stSelectbox"] label, [data-testid="stSidebar"] [data-testid="stSelectbox"] label * { color: #fff !important; }
 [data-testid="stSidebar"] [data-baseweb="tag"], [data-testid="stSidebar"] [data-baseweb="tag"] * { color: #fff !important; }
 
 /* Sentuhan tampilan: kartu sedikit terangkat saat disentuh, garis aksen di
@@ -354,6 +361,13 @@ button[data-testid="stExpandSidebarButton"] span { color: %(aksen)s !important; 
 [data-testid="stSidebar"] [data-baseweb="select"] *, [data-testid="stSidebar"] [data-baseweb="select"] input,
 [data-testid="stSidebar"] [data-baseweb="select"] svg { color: #101828 !important; fill: #101828 !important; -webkit-text-fill-color: #101828 !important; opacity: 1 !important; }
 [data-testid="stSidebar"] [data-baseweb="select"] input::placeholder { color: #667085 !important; -webkit-text-fill-color: #667085 !important; }
+/* Streamlit versi baru memakai react-aria (bukan baseweb) untuk kotak pilihan */
+[data-testid="stSidebar"] [data-testid="stSelectbox"] [role="group"], [data-testid="stSidebar"] [data-testid="stMultiSelect"] [role="group"] { background: #fff; border-radius: 10px; }
+[data-testid="stSidebar"] [data-testid="stSelectbox"] input, [data-testid="stSidebar"] [data-testid="stMultiSelect"] input,
+[data-testid="stSidebar"] input[role="combobox"] { color: #101828 !important; -webkit-text-fill-color: #101828 !important; opacity: 1 !important; background: transparent !important; }
+[data-testid="stSidebar"] [data-testid="stSelectbox"] button, [data-testid="stSidebar"] [data-testid="stSelectbox"] button svg,
+[data-testid="stSidebar"] [data-testid="stMultiSelect"] button svg { color: #101828 !important; fill: #101828 !important; }
+[data-testid="stSidebar"] [data-testid="stSelectbox"] label, [data-testid="stSidebar"] [data-testid="stSelectbox"] label * { color: #fff !important; }
 [data-testid="stSidebar"] [data-baseweb="tag"], [data-testid="stSidebar"] [data-baseweb="tag"] * { color: #fff !important; }
 [data-testid="stSidebar"] [data-testid="stFileUploader"] section { background: rgba(255,255,255,0.10); }
 [data-testid="stSidebar"] [data-testid="stFileUploader"] small, [data-testid="stSidebar"] [data-testid="stFileUploader"] span { color: #fff; }
