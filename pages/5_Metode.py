@@ -133,6 +133,26 @@ istilah(
     "dengan anggapan kesalahan menyebar mendekati normal.")
 
 # --------------------------------------------------------------------------
+bagian("Pemeriksaan", "Tiga pemeriksaan kelayakan model",
+       "Mengikuti tahapan di RPS: praproses, visualisasi, ARIMA, dan validasi.")
+istilah(
+    "<b>1. Uji stasioneritas (ADF, praproses).</b> Menguji apakah rata-rata "
+    "dan sebaran harga stabil dari waktu ke waktu. Hipotesis nol: data "
+    "<i>tidak</i> stasioner. p-value di bawah 0,05 berarti hipotesis nol "
+    "ditolak, data stasioner. Bila belum, data diselisih; jumlah selisih itu "
+    "adalah <b>d</b> pada ARIMA(p,d,q).<br>"
+    "<b>2. ACF dan PACF (visualisasi).</b> Korelasi perubahan harga dengan "
+    "perubahan harga pada jeda 1 sampai 24 bulan. Batas kemaknaan "
+    "±1,96/√n. Menjadi petunjuk bagi <b>q</b> (ACF) dan <b>p</b> (PACF), serta "
+    "pola musiman pada jeda 12.<br>"
+    "<b>3. Uji Ljung-Box (validasi).</b> Menguji apakah sisaan model masih "
+    "berkorelasi satu sama lain. Hipotesis nol: sisaan acak. p-value di atas "
+    "0,05 berarti model sudah menangkap pola yang ada.")
+st.latex(r"Q = n(n+2)\sum_{k=1}^{h}\frac{\hat\rho_k^2}{n-k}")
+istilah("Pemeriksaan ini dihitung pada model SARIMA terbaik yang dipasang di "
+        "seluruh data, dan tampil di halaman Peramalan. Hasilnya menjadi "
+        "catatan kelayakan, bukan syarat yang menggugurkan ramalan.")
+
 bagian("Pengaman", "Pengaman yang dipasang")
 wawasan("Agar ramalan tidak menyesatkan", [
     f"<b>Harga mandek.</b> Bila harga sama persis selama "
@@ -140,8 +160,14 @@ wawasan("Agar ramalan tidak menyesatkan", [
     "kemungkinan besar datanya tidak diperbarui di sumber.",
     "<b>Data minimal.</b> Dibutuhkan paling sedikit 24 bulan. Di bawah itu, "
     "pola tahunan tidak bisa dipelajari.",
-    "<b>Pemilihan tanpa mengintip.</b> Pengaturan model dipilih memakai data "
-    "latih saja, sehingga data uji benar-benar tidak ikut menentukan.",
+    "<b>Dua tahap pemilihan.</b> Pengaturan di dalam tiap model (misalnya "
+    "susunan SARIMA) dipilih memakai data latih saja dengan kriteria AIC, "
+    "sehingga data uji tidak ikut menentukan. Namun <b>pemenang di antara "
+    "tiga metode</b> dipilih dari MAPE pada data uji yang sama dengan yang "
+    "dilaporkan, sehingga MAPE pemenang cenderung sedikit lebih optimistis "
+    "daripada kenyataan ke depan. Cara yang lebih ketat adalah menyisihkan "
+    "bagian data ketiga khusus untuk menilai, atau mengulang ujian di beberapa "
+    "titik waktu; keduanya belum dilakukan.",
     "<b>Tolok ukur jujur.</b> Bila model rumit kalah dari menyalin harga "
     "tahun lalu, hal itu ditampilkan apa adanya dan ramalan memakai cara "
     "terbaik berikutnya.",

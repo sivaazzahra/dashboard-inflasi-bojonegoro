@@ -37,6 +37,11 @@ def jalankan(deret: pd.Series, langkah: int) -> dict:
     return mesin.hitung(deret, langkah)
 
 
+@st.cache_data(show_spinner="Memeriksa kelayakan model…")
+def periksa(deret: pd.Series) -> dict:
+    return mesin.periksa_model(deret)
+
+
 # --------------------------------------------------------------------------
 # Menu samping
 # --------------------------------------------------------------------------
@@ -376,6 +381,114 @@ wawasan("Temuan", [
 # --------------------------------------------------------------------------
 # 2. Metode yang cocok
 # --------------------------------------------------------------------------
+# --------------------------------------------------------------------------
+# 1b. Pemeriksaan model
+# --------------------------------------------------------------------------
+bagian("Pemeriksaan", "Apakah modelnya layak dipakai? Tiga pemeriksaan",
+       "Mengikuti tahapan analisis deret waktu: praproses (apakah datanya "
+       "stabil), visualisasi pola (ACF dan PACF), dan validasi (apakah model "
+       "sudah menangkap seluruh pola).")
+pr = periksa(deret)
+tab_adf, tab_acf, tab_lb = st.tabs(
+    ["1. Kestabilan data (ADF)", "2. Pola keterkaitan (ACF dan PACF)",
+     "3. Sisa pola model (Ljung-Box)"])
+
+with tab_adf:
+    if pr["adf"]:
+        t = pd.DataFrame(pr["adf"])
+        t["Statistik ADF"] = t["Statistik ADF"].map(lambda v: angka(v, 3))
+        t["p-value"] = t["p-value"].map(lambda v: angka(v, 4))
+        t["Kesimpulan"] = t["Stasioner"].map(
+            lambda v: "stasioner (stabil)" if v else "belum stasioner")
+        st.dataframe(t[["Perlakuan", "Statistik ADF", "p-value", "Kesimpulan"]],
+                     use_container_width=True, hide_index=True)
+        asli = pr["adf"][0]
+        istilah(
+            "<b>Cara membaca.</b> Uji ADF bertanya: apakah rata-rata dan "
+            "sebaran data tetap sama dari waktu ke waktu (stasioner)? Model "
+            "ARIMA mensyaratkannya. <b>p-value di bawah 0,05</b> berarti data "
+            "stasioner. Kalau belum, data diselisih (harga bulan ini dikurangi "
+            "bulan lalu) sampai stasioner; itulah arti angka <b>d</b> pada "
+            "ARIMA(p,d,q).<br>"
+            + (f"<b>Hasil untuk {komoditas}:</b> data asli "
+               + ("sudah stasioner" if asli["Stasioner"] else "belum stasioner")
+               + f" (p = {angka(asli['p-value'], 4)}). "
+               + ("Model SARIMA tetap memakai selisih (d=1) agar seragam untuk "
+                  "semua komoditas." if asli["Stasioner"] else
+                  "Karena itu SARIMA memakai selisih (d=1), dan baris kedua "
+                  "menunjukkan apakah selisih itu sudah cukup.")))
+    else:
+        st.info("Uji ADF tidak bisa dihitung untuk data ini (data terlalu "
+                "pendek atau hampir tidak bervariasi).")
+
+with tab_acf:
+    if pr["acf"] is not None:
+        lags = list(range(1, pr["lag"] + 1))
+        kolom_a, kolom_p = st.columns(2)
+        for kol, nilai, judul in [(kolom_a, pr["acf"], "ACF"),
+                                  (kolom_p, pr["pacf"], "PACF")]:
+            f = go.Figure(go.Bar(
+                x=lags, y=nilai, marker=dict(
+                    color=[WARNA["seri2"] if abs(v) > pr["batas"]
+                           else WARNA["redup"] for v in nilai],
+                    line=dict(width=0)),
+                hovertemplate="jeda %{x} bulan: %{y:.2f}<extra></extra>"))
+            f.add_hline(y=pr["batas"], line_dash="dash", line_width=1,
+                        line_color=WARNA["seri1"])
+            f.add_hline(y=-pr["batas"], line_dash="dash", line_width=1,
+                        line_color=WARNA["seri1"])
+            f.update_layout(title=dict(text=judul, x=0.01,
+                                       font=dict(size=13)))
+            f.update_xaxes(title_text="jeda (bulan)")
+            kol.plotly_chart(gaya_titik(f, 280), use_container_width=True)
+        istilah(
+            "<b>Cara membaca.</b> Setiap batang adalah keterkaitan antara "
+            "perubahan harga bulan ini dengan perubahan harga beberapa bulan "
+            "sebelumnya (jeda 1 sampai 24 bulan). Batang <b>jingga</b> yang "
+            "menembus garis putus-putus berarti keterkaitannya bermakna secara "
+            "statistik; batang abu-abu bisa dianggap kebetulan.<br>"
+            "• <b>ACF</b> membantu memilih bagian rata-rata bergerak (q); "
+            "<b>PACF</b> membantu memilih bagian autoregresi (p).<br>"
+            "• Batang yang menonjol di <b>jeda 12</b> menandakan pola tahunan, "
+            "alasan model musiman dipakai.<br>"
+            "• Bila hampir semua batang abu-abu, perubahan harga bulan ini "
+            "hampir tidak bisa ditebak dari bulan-bulan sebelumnya.")
+    else:
+        st.info("ACF dan PACF tidak bisa dihitung untuk data ini.")
+
+with tab_lb:
+    if pr["ljung"] is not None:
+        lj = pr["ljung"]
+        c1, c2 = st.columns(2)
+        kartu(c1, "p-value uji Ljung-Box", angka(lj["p"], 3),
+              f"pada jeda {lj['lag']} bulan, dari {lj['n']} sisaan", kecil=True)
+        kartu(c2, "Kesimpulan",
+              "Sisaan acak (baik)" if lj["acak"] else "Masih ada pola",
+              f"model yang diperiksa: {pr['ordo']}", kecil=True)
+        sisa_df = pr["sisa"]
+        f = go.Figure(go.Bar(
+            x=sisa_df["periode"], y=sisa_df["sisa"],
+            marker=dict(color=WARNA["seri1"], line=dict(width=0)),
+            hovertemplate="%{x|%b %Y}: Rp %{y:,.0f}<extra></extra>"))
+        f.add_hline(y=0, line_width=1, line_color=WARNA["redup"])
+        f.update_yaxes(tickprefix="Rp ", separatethousands=True,
+                       title_text="selisih model dan kenyataan")
+        st.plotly_chart(gaya_titik(f, 260), use_container_width=True)
+        istilah(
+            "<b>Cara membaca.</b> Sisaan adalah selisih antara harga yang "
+            "dihitung model dan harga sebenarnya pada data yang sudah dilihat. "
+            "Model yang baik meninggalkan sisaan yang acak, tanpa pola. Uji "
+            "Ljung-Box memeriksa hal itu: <b>p-value di atas 0,05</b> berarti "
+            "sisaan acak, sehingga model sudah menangkap pola yang ada. "
+            "<b>p-value di bawah 0,05</b> berarti masih ada pola yang luput, "
+            "dan ramalan sebaiknya dibaca lebih hati-hati."
+            + ("<br><b>Hasil untuk " + str(komoditas) + ":</b> "
+               + ("tidak terlihat pola tersisa pada sisaan." if lj["acak"]
+                  else "masih ada pola pada sisaan, jadi model SARIMA belum "
+                       "menangkap semuanya.")))
+    else:
+        st.info("Uji Ljung-Box tidak bisa dihitung untuk data ini.")
+
 bagian("Metode", f"Metode mana yang cocok untuk {komoditas}?")
 penjelasan_metode = {
     "SARIMA": "SARIMA belajar dari hubungan harga bulan ini dengan bulan-bulan "
@@ -655,8 +768,10 @@ st.markdown(
   belum dilakukan agar halaman tidak lambat.
 - **Pengaturan model dibatasi pada beberapa pilihan tetap** supaya hasilnya
   bisa diulang orang lain. Bisa jadi ada pengaturan yang lebih baik yang
-  tidak tercoba. Pemilihannya hanya memakai data latih, sehingga data uji
-  benar-benar tidak ikut menentukan.
+  tidak tercoba. Pengaturan di dalam tiap model dipilih dari data latih saja,
+  tetapi pemenang di antara tiga metode dipilih dari data uji yang sama
+  dengan yang dilaporkan, sehingga MAPE pemenang cenderung sedikit lebih
+  optimistis daripada kenyataan ke depan.
 - **Rentang kemungkinan (pita biru) dihitung dengan anggapan** kesalahan
   tebakan menyebar merata. Pada komoditas yang harganya sering melonjak
   tajam, anggapan itu kurang pas, sehingga pita bisa terlalu sempit.
