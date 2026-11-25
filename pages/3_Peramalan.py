@@ -5,37 +5,21 @@ HALAMAN 3 — PERAMALAN
 Meramalkan harga komoditas beberapa bulan ke depan, dan yang sama
 pentingnya: mengukur seberapa bisa ramalan itu dipercaya.
 
-Alur kerjanya:
-  1. Data dibelah dua. Dua belas bulan terakhir disembunyikan dari model
-     dan dipakai sebagai kunci jawaban.
-  2. Tiga metode dijalankan pada bagian latih, lalu disuruh meramal
-     dua belas bulan yang disembunyikan tadi.
-  3. Ketepatan ketiganya diukur dengan RMSE, MAE, dan MAPE.
-  4. Metode dengan MAPE terkecil dipasang ulang memakai seluruh data,
-     barulah dipakai meramal ke depan.
-
-Langkah 1 sampai 3 itu yang membedakan peramalan dari tebakan. Tanpa
-pengujian pada data yang disembunyikan, tidak ada dasar untuk mengatakan
-ramalannya layak dipakai.
+Data yang diramal bisa data bawaan dashboard (SISKAPERBAPO Bojonegoro) atau
+data yang diunggah pengguna sendiri. Seluruh hitungan ada di mesin_ramal.py.
 """
 
-import warnings
+import io
 
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
-from alat import (WARNA, angka, atur_halaman, bacaan, bagian, gaya,
-                  gaya_titik, kartu, kepala, muat_harga, navigasi, nama_bulan,
-                  periksa_data, rupiah, sumber, wawasan, istilah)
-
-# statsmodels gemar memperingatkan soal konvergensi pada deret pendek.
-# Peringatan itu tidak mengubah hasil, jadi disenyapkan agar tidak
-# memenuhi layar pengguna.
-warnings.filterwarnings("ignore")
-from statsmodels.tsa.exponential_smoothing.ets import ETSModel  # noqa: E402
-from statsmodels.tsa.statespace.sarimax import SARIMAX  # noqa: E402
+import mesin_ramal as mesin
+from alat import (WARNA, angka, atur_halaman, bacaan, bagian, gaya, gaya_titik,
+                  istilah, kartu, kepala, muat_harga, nama_bulan, periksa_data,
+                  rupiah, sumber, wawasan)
 
 atur_halaman("Peramalan")
 
@@ -43,218 +27,219 @@ if not periksa_data():
     st.stop()
 
 harga = muat_harga()
-
-PANJANG_UJI = 12          # bulan yang disembunyikan sebagai kunci jawaban
-MUSIM = 12                # satu siklus musiman = 12 bulan
-SELANG = 0.20             # 1 - 0,20 = selang kepercayaan 80%
-
-# Enam calon ordo SARIMA. Dipilih yang AIC-nya terkecil pada data latih.
-# Daftarnya sengaja pendek dan tetap, bukan pencarian menyeluruh, supaya
-# halaman tidak lambat dan hasilnya bisa diulang oleh orang lain.
-CALON_ORDO = [((1, 1, 1), (1, 1, 1, MUSIM)),
-              ((0, 1, 1), (0, 1, 1, MUSIM)),
-              ((1, 1, 0), (1, 1, 0, MUSIM)),
-              ((2, 1, 1), (1, 1, 1, MUSIM)),
-              ((1, 1, 1), (0, 1, 1, MUSIM)),
-              ((0, 1, 1), (1, 1, 1, MUSIM))]
-
-
-# --------------------------------------------------------------------------
-# Perhitungan
-# --------------------------------------------------------------------------
-def ukur(aktual, ramalan) -> dict:
-    """Tiga ukuran ketepatan yang lazim dipakai pada peramalan.
-
-    RMSE dan MAE bersatuan rupiah, jadi tidak bisa dibandingkan antar
-    komoditas yang harganya berbeda jauh. MAPE bersatuan persen, sehingga
-    bisa. Karena itu pemenang ditentukan dengan MAPE.
-    """
-    a, r = np.asarray(aktual, float), np.asarray(ramalan, float)
-    bukan_nol = a != 0
-    return {
-        "RMSE": float(np.sqrt(np.mean((a - r) ** 2))),
-        "MAE": float(np.mean(np.abs(a - r))),
-        "MAPE": (float(np.mean(np.abs((a[bukan_nol] - r[bukan_nol])
-                                      / a[bukan_nol])) * 100)
-                 if bukan_nol.any() else np.nan),
-    }
-
-
-def ambil_deret(df: pd.DataFrame, komoditas: str) -> pd.Series:
-    """Mengubah data panjang menjadi satu deret waktu bulanan yang rapat.
-
-    Model deret waktu menuntut jarak antarpengamatan yang tetap, jadi
-    frekuensinya dipaksa bulanan dan lubang kecil ditambal dengan
-    interpolasi linear.
-    """
-    s = df[df["komoditas"] == komoditas].set_index("periode")["harga"].sort_index()
-    s.index = pd.DatetimeIndex(s.index).to_period("M").to_timestamp()
-    return s.asfreq("MS").interpolate()
-
-
-def pasang_sarima(latih: pd.Series):
-    """Memasang SARIMA dengan ordo terbaik menurut AIC."""
-    terbaik = None
-    for ordo, ordo_musiman in CALON_ORDO:
-        try:
-            model = SARIMAX(latih, order=ordo, seasonal_order=ordo_musiman,
-                            enforce_stationarity=False,
-                            enforce_invertibility=False).fit(disp=False)
-            if terbaik is None or model.aic < terbaik[0]:
-                terbaik = (model.aic, ordo, ordo_musiman, model)
-        except Exception:
-            continue
-    return terbaik
-
-
-def pasang_hw(latih: pd.Series):
-    """Memasang Holt-Winters aditif (galat, tren, dan musiman aditif)."""
-    return ETSModel(latih, error="add", trend="add", seasonal="add",
-                    seasonal_periods=MUSIM,
-                    initialization_method="estimated").fit(disp=False)
+PEMBANDING = mesin.NAMA_PEMBANDING
 
 
 @st.cache_data(show_spinner="Memasang model dan menghitung ketepatannya…")
-def jalankan(komoditas: str, langkah: int) -> dict:
-    """Seluruh perhitungan satu komoditas, disimpan di tembolok.
-
-    Hasilnya hanya berisi tabel dan angka, bukan obyek model, supaya bisa
-    disimpan Streamlit dan tidak dihitung ulang setiap kali layar disegarkan.
-    """
-    deret = ambil_deret(harga, komoditas)
-    latih, uji = deret.iloc[:-PANJANG_UJI], deret.iloc[-PANJANG_UJI:]
-
-    hasil_uji = pd.DataFrame({"periode": uji.index, "Aktual": uji.values})
-    ukuran, ordo_terpilih = {}, "—"
-
-    # --- SARIMA
-    terbaik = pasang_sarima(latih)
-    if terbaik is not None:
-        _, ordo, ordo_musiman, model = terbaik
-        ordo_terpilih = (f"SARIMA{ordo}{ordo_musiman}"
-                         .replace(" ", "").replace(",)", ")"))
-        hasil_uji["SARIMA"] = model.forecast(PANJANG_UJI).values
-        ukuran["SARIMA"] = ukur(uji.values, hasil_uji["SARIMA"])
-
-    # --- Holt-Winters
-    try:
-        hw = pasang_hw(latih)
-        hasil_uji["Holt-Winters"] = hw.forecast(PANJANG_UJI).values
-        ukuran["Holt-Winters"] = ukur(uji.values, hasil_uji["Holt-Winters"])
-    except Exception:
-        pass
-
-    # --- Naif musiman: harga bulan ini diramal sama dengan 12 bulan lalu.
-    # Pembanding dasar. Model yang tidak mampu mengalahkannya tidak layak
-    # dipakai, sebab berarti kerumitannya tidak menghasilkan apa-apa.
-    naif = deret.shift(MUSIM).iloc[-PANJANG_UJI:]
-    hasil_uji["Naif musiman"] = naif.values
-    ukuran["Naif musiman"] = ukur(uji.values, naif.values)
-
-    tabel_ukuran = (pd.DataFrame(ukuran).T
-                    .reset_index().rename(columns={"index": "Metode"})
-                    .sort_values("MAPE").reset_index(drop=True))
-
-    # --- Pemenang dipasang ulang pada SELURUH data, lalu meramal ke depan.
-    # Memasang ulang itu penting: model akhir harus memanfaatkan semua
-    # pengamatan yang ada, termasuk dua belas bulan yang tadi disembunyikan.
-    pemenang = tabel_ukuran.loc[0, "Metode"]
-    metode_ramalan = pemenang if pemenang != "Naif musiman" else tabel_ukuran.loc[
-        tabel_ukuran["Metode"] != "Naif musiman", "Metode"].iloc[0]
-
-    if metode_ramalan == "SARIMA":
-        # Ordo yang dipakai adalah ordo yang terpilih pada data LATIH, bukan
-        # hasil pencarian ulang pada seluruh data. Ini disengaja: memilih
-        # ordo dengan melihat data uji berarti model sudah mengintip kunci
-        # jawaban, sehingga ketepatan yang dilaporkan jadi terlalu bagus.
-        _, ordo, ordo_musiman, _ = terbaik
-        akhir = SARIMAX(deret, order=ordo, seasonal_order=ordo_musiman,
-                        enforce_stationarity=False,
-                        enforce_invertibility=False).fit(disp=False)
-        ramal = akhir.get_forecast(langkah)
-        nilai = ramal.predicted_mean
-        batas = ramal.conf_int(alpha=SELANG)
-        bawah, atas = batas.iloc[:, 0].values, batas.iloc[:, 1].values
-    else:
-        akhir = pasang_hw(deret)
-        ramal = akhir.get_prediction(start=len(deret),
-                                     end=len(deret) + langkah - 1)
-        nilai = ramal.predicted_mean
-        batas = ramal.pred_int(alpha=SELANG)
-        bawah, atas = batas.iloc[:, 0].values, batas.iloc[:, 1].values
-
-    bulan_depan = pd.date_range(deret.index[-1] + pd.offsets.MonthBegin(),
-                                periods=langkah, freq="MS")
-    ramalan = pd.DataFrame({
-        "periode": bulan_depan,
-        "ramalan": np.asarray(nilai, float),
-        "bawah": np.asarray(bawah, float),
-        "atas": np.asarray(atas, float)})
-
-    return {
-        "deret": deret.reset_index().rename(columns={"index": "periode",
-                                                     0: "harga"}),
-        "akhir_latih": latih.index[-1],
-        "uji": hasil_uji,
-        "ukuran": tabel_ukuran,
-        "ordo": ordo_terpilih,
-        "pemenang": pemenang,
-        "metode_ramalan": metode_ramalan,
-        "ramalan": ramalan,
-    }
+def jalankan(deret: pd.Series, langkah: int) -> dict:
+    """Perhitungan satu deret, disimpan di tembolok. Hasilnya hanya tabel
+    dan angka, bukan obyek model, supaya bisa disimpan Streamlit."""
+    return mesin.hitung(deret, langkah)
 
 
 # --------------------------------------------------------------------------
-# Penyaring
+# Menu samping
 # --------------------------------------------------------------------------
 with st.sidebar:
-    st.markdown("### Penyaring")
-    hanya_pangan = st.toggle("Hanya kelompok pangan", value=True)
-    tersedia = harga[harga["pangan"]] if hanya_pangan else harga
+    st.markdown("### Atur tampilan")
+    asal = st.radio(
+        "Data yang diramal", ["Data bawaan Bojonegoro", "Unggah data sendiri"],
+        help="Data bawaan berasal dari SISKAPERBAPO. Pilih unggah bila ingin "
+             "meramal data harga milikmu sendiri, misalnya data terbaru "
+             "yang kamu ambil dari SISKAPERBAPO.")
+    pakai_unggahan = asal == "Unggah data sendiri"
 
-    kelompok = st.selectbox("Kelompok",
-                            options=sorted(tersedia["kelompok"].unique()))
-    komoditas = st.selectbox(
-        "Komoditas",
-        options=sorted(tersedia[tersedia["kelompok"] == kelompok]["komoditas"].unique()))
-    langkah = st.slider("Berapa bulan diramalkan", 3, 12, 6,
-                        help="Makin jauh ke depan, makin lebar selang "
-                             "kepercayaannya — dan makin tipis gunanya.")
+    hanya_pangan = True
+    if not pakai_unggahan:
+        hanya_pangan = st.toggle("Hanya kelompok pangan", value=True)
+        tersedia = harga[harga["pangan"]] if hanya_pangan else harga
+        kelompok = st.selectbox("Kelompok",
+                                options=sorted(tersedia["kelompok"].unique()))
+        komoditas = st.selectbox(
+            "Komoditas",
+            options=sorted(tersedia[tersedia["kelompok"] == kelompok]
+                           ["komoditas"].unique()))
 
-hasil = jalankan(komoditas, langkah)
-deret = hasil["deret"]
-kolom_harga = deret.columns[-1]
-ukuran = hasil["ukuran"]
-ramalan = hasil["ramalan"]
-terbaik = ukuran.iloc[0]
-# Metode yang benar-benar dipakai meramal bisa berbeda dari peringkat 1: bila
-# pembanding naif menang, ramalan memakai metode terbaik kedua. Angka ketepatan
-# yang ditampilkan di samping ramalan harus milik metode yang dipakai itu.
-dipakai = ukuran[ukuran["Metode"] == hasil["metode_ramalan"]].iloc[0]
+    langkah = st.slider("Berapa bulan ke depan", 3, 12, 6,
+                        help="Makin jauh ke depan, makin lebar rentang "
+                             "kemungkinannya dan makin kurang bisa diandalkan.")
 
 kepala("Peramalan Harga Komoditas",
-       "Ramalan beberapa bulan ke depan, beserta pengujian yang menjadi "
-       "dasar untuk memercayainya.",
-       f"{komoditas} · tiga metode dibandingkan · "
-       f"diuji pada {PANJANG_UJI} bulan terakhir",
+       "Perkiraan harga beberapa bulan ke depan, beserta bukti seberapa "
+       "bisa perkiraan itu dipercaya.",
+       "Data bawaan atau unggahan sendiri · tiga cara menebak dibandingkan · "
+       "diuji pada data yang disembunyikan",
        latar="latar_peramalan")
-navigasi()
+
+# --------------------------------------------------------------------------
+# Sumber deret
+# --------------------------------------------------------------------------
+if not pakai_unggahan:
+    deret = mesin.deret_dari_tabel(harga, komoditas)
+else:
+    bagian("Data kamu", "Unggah data harga untuk diramal",
+           "Siapa pun bisa memakai halaman ini: ambil data harga terbaru "
+           "(misalnya dari SISKAPERBAPO, yang datanya rilis tiap hari), "
+           "unggah di sini, lalu lihat uji dan ramalannya.")
+    k1, k2 = st.columns([2, 1])
+    with k1:
+        berkas = st.file_uploader("Berkas harga (CSV atau Excel)",
+                                  type=["csv", "xlsx", "xls"])
+    with k2:
+        st.markdown("&nbsp;", unsafe_allow_html=True)
+        st.download_button("Unduh contoh format", mesin.contoh_berkas(harga),
+                           file_name="contoh_format_harga.csv",
+                           mime="text/csv", use_container_width=True)
+    istilah(
+        "<b>Format berkas.</b> Minimal dua kolom: <b>tanggal</b> dan "
+        "<b>harga</b>. Satu kolom <b>komoditas</b> boleh ditambahkan bila "
+        "berkasnya memuat beberapa komoditas. Data harian atau mingguan "
+        "otomatis dirata-ratakan per bulan. Dibutuhkan <b>minimal 24 bulan</b>; "
+        "idealnya 36 bulan atau lebih agar pola tahunan bisa dipelajari. "
+        "Ramalan dimulai dari bulan setelah data terakhirmu: bila datamu "
+        "berakhir Desember 2025, ramalannya mulai Januari 2026.")
+    if berkas is None:
+        st.info("Unggah berkas untuk mulai. Belum punya? Unduh contoh format "
+                "di atas, lalu ganti isinya dengan datamu.")
+        st.stop()
+    try:
+        tabel_unggah = mesin.baca_berkas(berkas.name, berkas.getvalue())
+    except Exception as galat:
+        st.error(f"Berkas tidak bisa dibaca: {galat}")
+        st.stop()
+    tebakan = mesin.tebak_kolom(tabel_unggah)
+    kolom = list(tabel_unggah.columns)
+    c1, c2, c3 = st.columns(3)
+    kol_tanggal = c1.selectbox(
+        "Kolom tanggal", kolom,
+        index=kolom.index(tebakan["tanggal"]) if tebakan["tanggal"] in kolom else 0)
+    kol_harga = c2.selectbox(
+        "Kolom harga", kolom,
+        index=kolom.index(tebakan["harga"]) if tebakan["harga"] in kolom
+        else min(1, len(kolom) - 1))
+    pilihan_kom = ["(tidak ada)"] + kolom
+    kol_kom = c3.selectbox(
+        "Kolom komoditas (opsional)", pilihan_kom,
+        index=pilihan_kom.index(tebakan["komoditas"])
+        if tebakan["komoditas"] in pilihan_kom else 0)
+    komoditas = "Data unggahan"
+    pilih_kom = None
+    if kol_kom != "(tidak ada)":
+        daftar = sorted(tabel_unggah[kol_kom].dropna().astype(str).unique())
+        pilih_kom = st.selectbox("Komoditas yang diramal", daftar)
+        komoditas = pilih_kom
+    try:
+        deret, catatan = mesin.siapkan_unggahan(
+            tabel_unggah, kol_tanggal, kol_harga,
+            None if kol_kom == "(tidak ada)" else kol_kom, pilih_kom)
+    except ValueError as galat:
+        st.error(str(galat))
+        st.stop()
+    depan = deret.index[-1] + pd.offsets.MonthBegin()
+    st.success(
+        f"Terbaca **{len(deret)} bulan**, dari {nama_bulan(deret.index[0])} "
+        f"sampai {nama_bulan(deret.index[-1])}. Ramalan akan dimulai "
+        f"{nama_bulan(depan)}.")
+    for c in catatan:
+        st.caption(c)
+
+try:
+    hasil = jalankan(deret, langkah)
+except ValueError as galat:
+    st.error(str(galat))
+    st.stop()
+
+deret_df = hasil["deret"]
+ramalan = hasil["ramalan"]
+harga_kini = float(deret_df["harga"].iloc[-1])
+harga_akhir = float(ramalan["ramalan"].iloc[-1])
+selisih = (harga_akhir / harga_kini - 1) * 100
+nama_berkas = str(komoditas).replace("/", "_").replace(" ", "_")
+
+
+# --------------------------------------------------------------------------
+# Berkas unduhan
+# --------------------------------------------------------------------------
+def buat_excel() -> bytes:
+    """Seluruh hasil dalam satu berkas Excel, satu lembar per tabel."""
+    keluar = io.BytesIO()
+    with pd.ExcelWriter(keluar, engine="openpyxl") as penulis:
+        ramalan.rename(columns={"periode": "Bulan", "ramalan": "Ramalan",
+                                "bawah": "Batas bawah 80%",
+                                "atas": "Batas atas 80%"}).to_excel(
+            penulis, sheet_name="Ramalan", index=False)
+        if hasil["ukuran"] is not None:
+            hasil["ukuran"].to_excel(penulis, sheet_name="Ketepatan uji",
+                                     index=False)
+            hasil["uji"].to_excel(penulis, sheet_name="Hasil uji", index=False)
+        deret_df.rename(columns={"periode": "Bulan", "harga": "Harga"}).to_excel(
+            penulis, sheet_name="Data bulanan", index=False)
+    return keluar.getvalue()
+
+
+def blok_unduh() -> None:
+    a, b = st.columns(2)
+    a.download_button(
+        "Unduh hasil lengkap (Excel)", buat_excel(),
+        file_name=f"ramalan_{nama_berkas}_{langkah}bulan.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        use_container_width=True)
+    b.download_button(
+        "Unduh ramalan saja (CSV)",
+        ramalan.to_csv(index=False).encode("utf-8"),
+        file_name=f"ramalan_{nama_berkas}_{langkah}bulan.csv",
+        mime="text/csv", use_container_width=True)
+
+
+# --------------------------------------------------------------------------
+# Kasus khusus: harga tidak berubah
+# --------------------------------------------------------------------------
+if hasil["mandek"] >= mesin.BULAN_MANDEK:
+    n = hasil["mandek"]
+    bagian("Peringatan data", f"Harga {komoditas} tidak berubah selama {n} bulan")
+    bacaan(
+        f"Harga <b>{komoditas}</b> tercatat persis <b>{rupiah(harga_kini)}</b> "
+        f"selama <b>{n} bulan</b> terakhir. Harga barang di pasar hampir tidak "
+        "pernah diam selama itu, sehingga kemungkinan besar angkanya "
+        "<b>tidak diperbarui di sumber data</b> (bukan karena harganya benar-"
+        "benar tetap). Model statistik tidak punya pola untuk dipelajari dari "
+        "deretan angka yang sama, jadi dashboard <b>tidak menampilkan "
+        "ramalan</b> untuk komoditas ini daripada memberi angka yang "
+        "menyesatkan.")
+    riw = deret_df.tail(48)
+    fig = go.Figure(go.Scatter(
+        x=riw["periode"], y=riw["harga"], mode="lines",
+        line=dict(color=WARNA["seri1"], width=2.6),
+        hovertemplate="Rp %{y:,.0f}<extra></extra>"))
+    fig.update_yaxes(tickprefix="Rp ", separatethousands=True)
+    st.plotly_chart(gaya(fig, 300), use_container_width=True)
+    istilah(
+        "<b>Apa yang bisa dilakukan?</b> Cek apakah komoditas ini memang "
+        "diperbarui rutin oleh petugas pemantau harga. Bila data sumbernya "
+        "sudah dikoreksi, unggah data terbaru melalui pilihan "
+        "<b>Unggah data sendiri</b> di menu samping, lalu ramalannya bisa "
+        "dihitung.")
+    blok_unduh()
+    st.stop()
+
+ukuran = hasil["ukuran"]
+uji = hasil["uji"]
+terbaik = ukuran.iloc[0]
+dipakai = ukuran[ukuran["Metode"] == hasil["metode_ramalan"]].iloc[0]
+uji_n = hasil["panjang_uji"]
+kolom_harga = "harga"
 
 # --------------------------------------------------------------------------
 # Ringkasan angka
 # --------------------------------------------------------------------------
-harga_kini = float(deret[kolom_harga].iloc[-1])
-harga_akhir = float(ramalan["ramalan"].iloc[-1])
-selisih = (harga_akhir / harga_kini - 1) * 100
-
 k1, k2, k3, k4 = st.columns(4)
-kartu(k1, "Metode terpilih", hasil["metode_ramalan"],
-      hasil["ordo"] if hasil["metode_ramalan"] == "SARIMA"
-      else "galat, tren, dan musiman aditif", kecil=True)
-kartu(k2, "MAPE pada data uji", angka(dipakai["MAPE"], 2) + "%",
-      f"rata-rata meleset sebesar itu dari harga sebenarnya "
-      f"selama {PANJANG_UJI} bulan uji")
-kartu(k3, f"Harga kini ({nama_bulan(deret['periode'].iloc[-1])})",
+kartu(k1, "Cara menebak yang dipakai", hasil["metode_ramalan"],
+      "mengikuti tren dan pola musim" if hasil["musiman"]
+      else "mengikuti tren (data terlalu pendek untuk pola musim)", kecil=True)
+kartu(k2, "Rata-rata meleset (MAPE)", angka(dipakai["MAPE"], 2) + "%",
+      f"rata-rata ramalan meleset sebesar itu dari harga sebenarnya "
+      f"pada {uji_n} bulan uji")
+kartu(k3, f"Harga kini ({nama_bulan(deret_df['periode'].iloc[-1])})",
       rupiah(harga_kini), "pengamatan terakhir yang tersedia")
 kartu(k4, f"Ramalan {nama_bulan(ramalan['periode'].iloc[-1])}",
       rupiah(harga_akhir),
@@ -264,14 +249,20 @@ kartu(k4, f"Ramalan {nama_bulan(ramalan['periode'].iloc[-1])}",
 # 1. Pengujian
 # --------------------------------------------------------------------------
 bagian("Pengujian", "Seberapa tepat ramalannya ketika diuji",
-       f"Dua belas bulan terakhir disembunyikan dari model, lalu ketiga "
-       f"metode disuruh menebaknya. Garis hitam adalah harga sebenarnya. "
-       f"Makin rapat sebuah garis ramalan menempel padanya, makin tepat "
-       f"metode itu untuk {komoditas}.")
+       f"Seperti ujian: data {uji_n} bulan terakhir disembunyikan, lalu "
+       f"tiga cara menebak diminta memperkirakannya. Garis hitam adalah harga "
+       f"sebenarnya. Makin dekat sebuah garis ramalan dengan garis hitam, "
+       f"makin tepat cara itu untuk {komoditas}.")
+istilah(
+    f"<b>Tiga cara menebak.</b> <b>{PEMBANDING}</b>: harga bulan ini "
+    "ditebak sama dengan 12 bulan lalu. Ini cara paling sederhana, dipakai "
+    "sebagai tolok ukur. <b>SARIMA</b> dan <b>Holt-Winters</b> adalah cara "
+    "statistik yang mempelajari tren dan pola musiman. Cara statistik baru "
+    "berguna kalau hasilnya lebih tepat daripada sekadar menyalin harga "
+    "tahun lalu.")
 
-uji = hasil["uji"]
 fig = go.Figure()
-riwayat = deret[deret["periode"] <= hasil["akhir_latih"]].tail(24)
+riwayat = deret_df[deret_df["periode"] <= hasil["akhir_latih"]].tail(24)
 fig.add_trace(go.Scatter(
     x=riwayat["periode"], y=riwayat[kolom_harga], name="Data latih",
     mode="lines", line=dict(color=WARNA["redup"], width=1.8),
@@ -283,12 +274,12 @@ fig.add_trace(go.Scatter(
     hovertemplate="sebenarnya Rp %{y:,.0f}<extra></extra>"))
 for nama, warna in [("SARIMA", WARNA["seri1"]),
                     ("Holt-Winters", WARNA["seri2"]),
-                    ("Naif musiman", WARNA["redup"])]:
+                    (PEMBANDING, WARNA["redup"])]:
     if nama in uji:
         fig.add_trace(go.Scatter(
             x=uji["periode"], y=uji[nama], name=nama, mode="lines",
             line=dict(color=warna, width=2,
-                      dash="dot" if nama == "Naif musiman" else "dash"),
+                      dash="dot" if nama == PEMBANDING else "dash"),
             hovertemplate=nama + " Rp %{y:,.0f}<extra></extra>"))
 fig.add_vline(x=hasil["akhir_latih"], line_width=1, line_dash="dot",
               line_color=WARNA["redup"])
@@ -303,11 +294,10 @@ tampil = tampil.rename(columns={"RMSE": "RMSE (Rp)", "MAE": "MAE (Rp)",
                                 "MAPE": "MAPE (%)"})
 tampil.insert(0, "Peringkat", range(1, len(tampil) + 1))
 st.dataframe(tampil, use_container_width=True, hide_index=True)
-st.caption("RMSE dan MAE bersatuan rupiah sehingga hanya berlaku untuk "
-           "komoditas ini. MAPE bersatuan persen sehingga bisa dibandingkan "
-           "antarkomoditas — karena itu pemenang ditentukan dengan MAPE.")
+st.caption("RMSE dan MAE dalam rupiah, jadi hanya berlaku untuk komoditas "
+           "ini. MAPE dalam persen, jadi bisa dibandingkan antarkomoditas. "
+           "Karena itu pemenang ditentukan dari MAPE (makin kecil makin baik).")
 
-# Penjelasan satuan rupiah, dengan angka metode terbaik sebagai contoh
 mae_b, rmse_b = terbaik["MAE"], terbaik["RMSE"]
 rasio = rmse_b / mae_b if mae_b else 1.0
 istilah(
@@ -316,8 +306,7 @@ istilah(
     "selisih dua harga satuannya tetap rupiah. "
     f"<br>• <b>MAE</b> adalah rata-rata selisih tanpa memandang arah. Untuk "
     f"{komoditas}, metode peringkat pertama ({terbaik['Metode']}) rata-rata "
-    f"meleset <b>{rupiah(mae_b)}</b> "
-    "dari harga sebenarnya. "
+    f"meleset <b>{rupiah(mae_b)}</b> dari harga sebenarnya. "
     f"<br>• <b>RMSE</b> mengkuadratkan selisih, merata-ratakannya, lalu "
     "diakarkan agar kembali ke rupiah. Kuadrat membuat meleset yang besar "
     f"dihukum lebih berat; nilainya {rupiah(rmse_b)}. "
@@ -332,34 +321,33 @@ istilah(
       "artinya daripada pada komoditas yang Rp 2.000. Karena itu pemenang "
       "ditentukan dengan <b>MAPE</b>, yang berupa persen.")
 
-naif = ukuran[ukuran["Metode"] == "Naif musiman"]["MAPE"].iloc[0]
+naif = ukuran[ukuran["Metode"] == PEMBANDING]["MAPE"].iloc[0]
 lebih_baik = naif - terbaik["MAPE"]
-if terbaik["Metode"] == "Naif musiman":
+if terbaik["Metode"] == PEMBANDING:
     bacaan(
-        f"Perlu dicatat: untuk {komoditas}, pembanding dasar <b>naif "
-        f"musiman</b> justru paling tepat (MAPE {angka(naif, 2)}%). Artinya "
-        "kedua model yang lebih rumit tidak memberi nilai tambah pada "
-        "komoditas ini, dan ramalan di bawah memakai metode terbaik kedua. "
-        "Temuan seperti ini tetap dilaporkan apa adanya, karena justru "
-        "menunjukkan pengujiannya berjalan sebagaimana mestinya.")
+        f"Perlu dicatat: untuk {komoditas}, cara <b>{PEMBANDING.lower()}</b> "
+        f"justru paling tepat (MAPE {angka(naif, 2)}%). Artinya model yang "
+        "lebih rumit tidak memberi nilai tambah pada komoditas ini, dan "
+        "ramalan di bawah memakai cara terbaik kedua. Temuan seperti ini tetap "
+        "dilaporkan apa adanya, karena justru menunjukkan pengujiannya "
+        "berjalan sebagaimana mestinya.")
 else:
     bacaan(
-        f"Metode terbaik untuk {komoditas} adalah <b>{terbaik['Metode']}</b> "
+        f"Cara terbaik untuk {komoditas} adalah <b>{terbaik['Metode']}</b> "
         f"dengan MAPE <b>{angka(terbaik['MAPE'], 2)}%</b>, artinya rata-rata "
         f"ramalannya meleset sekitar segitu dari harga sebenarnya. "
-        f"Pembanding dasar naif musiman mencatat MAPE {angka(naif, 2)}%, "
+        f"Cara menyalin harga tahun lalu mencatat MAPE {angka(naif, 2)}%, "
         f"jadi model ini <b>{angka(lebih_baik, 2)} poin lebih baik</b> "
-        "daripada sekadar menyalin harga tahun lalu — itulah bukti bahwa "
-        "pemodelannya memang memberi nilai tambah.")
+        "daripada sekadar menyalin harga tahun lalu, itulah bukti bahwa "
+        "pemodelannya memberi nilai tambah.")
 
-n_model = len(ukuran) - 1                      # di luar pembanding naif
-n_kalah = int(((ukuran["MAPE"] > naif)
-               & (ukuran["Metode"] != "Naif musiman")).sum())
+n_model = len(ukuran) - 1
+n_kalah = int(((ukuran["MAPE"] > naif) & (ukuran["Metode"] != PEMBANDING)).sum())
 layak = dipakai["MAPE"] < 10
 wawasan("Temuan", [
     f"Dari {n_model} metode pemodelan, <b>{n_kalah}</b> kalah tepat dibanding "
-    "pembanding naif musiman. Kalau pemodelan tidak mengalahkan "
-    "pembanding ini, kerumitannya tidak ada gunanya.",
+    "cara menyalin harga tahun lalu. Kalau pemodelan tidak mengalahkan "
+    "tolok ukur ini, kerumitannya tidak ada gunanya.",
     f"Metode yang dipakai meramal ({hasil['metode_ramalan']}) mencatat MAPE "
     f"<b>{angka(dipakai['MAPE'], 2)}%</b> pada data uji, "
     + ("di bawah ambang 10%, sehingga ramalannya layak dipakai sebagai "
@@ -369,31 +357,56 @@ wawasan("Temuan", [
 ])
 
 # --------------------------------------------------------------------------
-# 2. Ramalan ke depan
+# 2. Metode yang cocok
+# --------------------------------------------------------------------------
+bagian("Metode", f"Metode mana yang cocok untuk {komoditas}?")
+penjelasan_metode = {
+    "SARIMA": "SARIMA belajar dari hubungan harga bulan ini dengan bulan-bulan "
+              "sebelumnya serta pola tahunannya. Cocok bila harga punya "
+              "kebiasaan yang cukup teratur.",
+    "Holt-Winters": "Holt-Winters menghaluskan data lalu meneruskan arah naik-"
+                    "turun (tren) dan pola musimnya. Cocok bila pergerakan "
+                    "harga cukup mulus.",
+    PEMBANDING: "Menyalin harga tahun lalu menang bila pola tahunan sangat "
+                "kuat dan stabil, atau bila data terlalu berantakan untuk "
+                "dipelajari model yang rumit.",
+}
+baris_metode = []
+for _, r in ukuran.iterrows():
+    penanda = " ← dipakai meramal" if r["Metode"] == hasil["metode_ramalan"] else ""
+    baris_metode.append(
+        f"• <b>{r['Metode']}</b> (MAPE {angka(r['MAPE'], 2)}%){penanda}. "
+        f"{penjelasan_metode.get(r['Metode'], '')}")
+catatan_musim = (
+    "" if hasil["musiman"] else
+    "<br><b>Catatan:</b> data latih kurang dari 24 bulan, sehingga pola musim "
+    "tahunan tidak dipelajari. Untuk hasil lebih baik, gunakan data minimal "
+    "36 bulan.")
+istilah("<b>Perbandingan tiga cara menebak.</b><br>" + "<br>".join(baris_metode)
+        + catatan_musim)
+
+# --------------------------------------------------------------------------
+# 3. Ramalan ke depan
 # --------------------------------------------------------------------------
 bagian("Proyeksi", f"Ramalan {langkah} bulan ke depan",
-       f"Dihitung dengan {hasil['metode_ramalan']} yang dipasang ulang "
-       "memakai seluruh data, termasuk dua belas bulan uji tadi. Pita biru "
-       "muda adalah selang kepercayaan 80%: harga sebenarnya diperkirakan "
-       "jatuh di dalam pita itu pada delapan dari sepuluh kejadian.")
+       f"Dihitung dengan {hasil['metode_ramalan']} memakai seluruh data. "
+       "Pita biru muda adalah rentang kemungkinan 80%: dari sepuluh kejadian "
+       "serupa, delapan kali harga sebenarnya jatuh di dalam pita itu.")
 
-riwayat2 = deret.tail(36)
-# Pita digambar lebih dulu agar garis ramalan berada di atasnya
+riwayat2 = deret_df.tail(36)
 fig = go.Figure()
 fig.add_trace(go.Scatter(
     x=list(ramalan["periode"]) + list(ramalan["periode"][::-1]),
     y=list(ramalan["atas"]) + list(ramalan["bawah"][::-1]),
     fill="toself", fillcolor="rgba(42,120,214,0.14)",
-    mode="lines",           # tanpa ini Plotly ikut menggambar titik di tepi pita
-    line=dict(width=0), name="Selang kepercayaan 80%",
+    mode="lines", line=dict(width=0), name="Rentang kemungkinan 80%",
     hoverinfo="skip"))
 fig.add_trace(go.Scatter(
     x=riwayat2["periode"], y=riwayat2[kolom_harga], name="Harga tercatat",
     mode="lines", line=dict(color=WARNA["tinta"], width=2.4),
     hovertemplate="tercatat Rp %{y:,.0f}<extra></extra>"))
-# Satu titik riwayat terakhir disambungkan agar garis ramalan tidak terputus
 sambung = pd.concat([
-    pd.DataFrame({"periode": [deret["periode"].iloc[-1]],
+    pd.DataFrame({"periode": [deret_df["periode"].iloc[-1]],
                   "ramalan": [harga_kini]}),
     ramalan[["periode", "ramalan"]]])
 fig.add_trace(go.Scatter(
@@ -402,7 +415,7 @@ fig.add_trace(go.Scatter(
                                     dash="dash"),
     marker=dict(size=7),
     hovertemplate="ramalan Rp %{y:,.0f}<extra></extra>"))
-fig.add_vline(x=deret["periode"].iloc[-1], line_width=1, line_dash="dot",
+fig.add_vline(x=deret_df["periode"].iloc[-1], line_width=1, line_dash="dot",
               line_color=WARNA["redup"])
 fig.update_yaxes(tickprefix="Rp ", separatethousands=True)
 st.plotly_chart(gaya(fig, 400), use_container_width=True)
@@ -414,7 +427,7 @@ bacaan(
     f"menjadi <b>{rupiah(harga_akhir)}</b> pada "
     f"{nama_bulan(ramalan['periode'].iloc[-1])}, "
     + ("naik" if selisih >= 0 else "turun")
-    + f" <b>{angka(abs(selisih), 1)}%</b>. Perhatikan pita kepercayaannya "
+    + f" <b>{angka(abs(selisih), 1)}%</b>. Perhatikan pita kemungkinannya "
       f"melebar dari {angka(lebar_awal, 1)}% pada bulan pertama menjadi "
       f"{angka(lebar_akhir, 1)}% pada bulan terakhir. Itu wajar dan harus "
       "dibaca sebagai peringatan: makin jauh ke depan, makin tidak pasti. "
@@ -437,8 +450,12 @@ wawasan("Temuan", [
 ])
 
 # --------------------------------------------------------------------------
-# 3. Tabel ramalan
+# 4. Unduh hasil
 # --------------------------------------------------------------------------
+bagian("Unduh", "Simpan hasilnya",
+       "Berkas Excel berisi empat lembar: ramalan, ketepatan uji, hasil uji "
+       "per bulan, dan data bulanan yang dipakai.")
+blok_unduh()
 with st.expander("Lihat angka ramalannya dalam tabel"):
     tabel = ramalan.copy()
     tabel["Bulan"] = tabel["periode"].map(nama_bulan)
@@ -448,105 +465,175 @@ with st.expander("Lihat angka ramalannya dalam tabel"):
     tabel["Perubahan dari harga kini"] = (
         (tabel["ramalan"] / harga_kini - 1) * 100).map(
             lambda v: angka(v, 1, tanda=True) + "%")
-    tampil_tabel = tabel[["Bulan", "Ramalan", "Batas bawah (80%)",
-                          "Batas atas (80%)", "Perubahan dari harga kini"]]
-    st.dataframe(tampil_tabel, use_container_width=True, hide_index=True)
-    st.download_button(
-        "Unduh ramalan ini (CSV)",
-        tampil_tabel.to_csv(index=False).encode("utf-8"),
-        file_name=f"ramalan_{komoditas.replace('/', '_')}_{langkah}bulan.csv",
-        mime="text/csv")
+    st.dataframe(tabel[["Bulan", "Ramalan", "Batas bawah (80%)",
+                        "Batas atas (80%)", "Perubahan dari harga kini"]],
+                 use_container_width=True, hide_index=True)
 
 # --------------------------------------------------------------------------
-# 4. Ketepatan seluruh komoditas
+# 5. Analisis kebijakan
 # --------------------------------------------------------------------------
-bagian("Perbandingan", "Komoditas mana yang memang bisa diramalkan",
-       "Ketepatan peramalan berbeda jauh antarkomoditas. Bahan pokok yang "
-       "harganya stabil bisa diramalkan dengan baik; bumbu yang harganya "
-       "melonjak-lonjak hampir tidak bisa. Perhitungan ini memasang model "
-       "untuk seluruh komoditas sehingga memakan waktu, jadi dijalankan "
-       "hanya bila diminta.")
+bagian("Kebijakan", "Apa artinya bagi pengambil keputusan?",
+       "Ramalan baru berguna kalau mengubah keputusan. Bagian ini "
+       "menerjemahkan angka menjadi bahan pertimbangan, dihitung otomatis "
+       "dari ramalan di atas.")
 
+pertama_batas_atas = ramalan["atas"].iloc[0]
+skenario = pd.DataFrame({
+    "Skenario": ["Harga lebih murah dari perkiraan", "Perkiraan dasar",
+                 "Harga lebih mahal dari perkiraan"],
+    "Dasar": ["Batas bawah pita", "Garis ramalan", "Batas atas pita"],
+    f"Harga {nama_bulan(ramalan['periode'].iloc[-1])}": [
+        rupiah(ramalan["bawah"].iloc[-1]), rupiah(harga_akhir),
+        rupiah(ramalan["atas"].iloc[-1])],
+    "Dibanding harga kini": [
+        angka((ramalan["bawah"].iloc[-1] / harga_kini - 1) * 100, 1, tanda=True) + "%",
+        angka(selisih, 1, tanda=True) + "%",
+        angka((ramalan["atas"].iloc[-1] / harga_kini - 1) * 100, 1, tanda=True) + "%"],
+})
+st.dataframe(skenario, use_container_width=True, hide_index=True)
 
-@st.cache_data(show_spinner="Menghitung ketepatan seluruh komoditas, "
-                            "mohon tunggu…")
-def ketepatan_semua(pangan_saja: bool) -> pd.DataFrame:
-    """Memasang Holt-Winters untuk semua komoditas sebagai gambaran kasar.
+butir = []
+if selisih >= 5:
+    butir.append(
+        f"<b>Harga diperkirakan naik cukup berarti ({angka(selisih, 1)}%).</b> "
+        "Bahan pertimbangan: periksa stok dan jalur pasokan di daerah "
+        "penghasil, siapkan pasar murah atau operasi pasar bila harga "
+        "mendekati batas atas pita, dan sampaikan perkiraan kepada pedagang "
+        "dan masyarakat agar tidak terjadi belanja panik.")
+elif selisih <= -5:
+    butir.append(
+        f"<b>Harga diperkirakan turun ({angka(abs(selisih), 1)}%).</b> Kabar "
+        "baik bagi pembeli, tetapi waspadai tekanan di sisi produsen (petani, "
+        "nelayan, peternak). Pantau harga di tingkat produsen, dan "
+        "pertimbangkan dukungan penyerapan hasil bila harga jatuh jauh di "
+        "bawah kebiasaan.")
+else:
+    butir.append(
+        f"<b>Harga diperkirakan relatif stabil ({angka(selisih, 1, tanda=True)}%).</b> "
+        "Pemantauan rutin sudah cukup. Tidak ada sinyal yang menuntut "
+        "intervensi khusus dari ramalan ini.")
+butir.append(
+    f"<b>Titik pemicu.</b> Bila harga sebenarnya pada "
+    f"{nama_bulan(ramalan['periode'].iloc[0])} melampaui "
+    f"<b>{rupiah(pertama_batas_atas)}</b> (batas atas pita bulan pertama), "
+    "itu pertanda ada gangguan di luar kebiasaan, misalnya pasokan atau "
+    "distribusi, dan perlu pengecekan lapangan.")
+if dipakai["MAPE"] >= 10:
+    butir.append(
+        f"<b>Ketepatan ujinya kurang baik (MAPE {angka(dipakai['MAPE'], 1)}%).</b> "
+        "Jangan jadikan ramalan ini satu-satunya dasar keputusan. Gunakan "
+        "untuk satu sampai tiga bulan pertama dan padukan dengan informasi "
+        "lapangan.")
+if lebar_akhir > 30:
+    butir.append(
+        f"<b>Ketidakpastian tinggi.</b> Pita kemungkinan melebar sampai "
+        f"{angka(lebar_akhir, 0)}% dari harga kini. Untuk perencanaan, lebih "
+        "aman memakai batas atas pita sebagai skenario terburuk daripada "
+        "garis ramalannya.")
+butir.append(
+    "<b>Kaitannya dengan pengendalian inflasi daerah.</b> Langkah-langkah di "
+    "atas sejalan dengan kerangka 4K yang lazim dipakai tim pengendalian "
+    "inflasi: keterjangkauan harga, ketersediaan pasokan, kelancaran "
+    "distribusi, dan komunikasi yang efektif. Ini bahan diskusi, bukan "
+    "keputusan resmi.")
+wawasan("Bahan pertimbangan kebijakan", butir)
 
-    Hanya satu metode yang dipakai di sini, bukan ketiganya, supaya
-    perhitungannya tidak terlalu lama. Tujuannya memang hanya memeringkat
-    komoditas menurut seberapa bisa diramalkan.
-    """
-    sumber_data = harga[harga["pangan"]] if pangan_saja else harga
-    baris = []
-    for kom in sorted(sumber_data["komoditas"].unique()):
-        s = ambil_deret(harga, kom)
-        latih, uji_s = s.iloc[:-PANJANG_UJI], s.iloc[-PANJANG_UJI:]
-        try:
-            r = pasang_hw(latih).forecast(PANJANG_UJI)
-            baris.append({"Komoditas": kom,
-                          "Kelompok": sumber_data.loc[
-                              sumber_data["komoditas"] == kom,
-                              "kelompok"].iloc[0],
-                          "MAPE": ukur(uji_s.values, r.values)["MAPE"]})
-        except Exception:
-            continue
-    return pd.DataFrame(baris).sort_values("MAPE").reset_index(drop=True)
+# --------------------------------------------------------------------------
+# 6. Ketepatan seluruh komoditas (hanya untuk data bawaan)
+# --------------------------------------------------------------------------
+if not pakai_unggahan:
+    bagian("Perbandingan", "Komoditas mana yang memang bisa diramalkan",
+           "Ketepatan peramalan berbeda jauh antarkomoditas. Bahan pokok yang "
+           "harganya stabil bisa diramalkan dengan baik; bumbu yang harganya "
+           "melonjak-lonjak hampir tidak bisa. Perhitungan ini memasang model "
+           "untuk seluruh komoditas sehingga memakan waktu, jadi dijalankan "
+           "hanya bila diminta.")
 
+    @st.cache_data(show_spinner="Menghitung ketepatan seluruh komoditas, "
+                                "mohon tunggu…")
+    def ketepatan_semua(pangan_saja: bool) -> tuple:
+        """Memasang Holt-Winters untuk semua komoditas sebagai gambaran kasar.
+        Komoditas yang harganya mandek dikeluarkan, karena ketepatannya tidak
+        bermakna."""
+        sumber_data = harga[harga["pangan"]] if pangan_saja else harga
+        baris, mandek_daftar = [], []
+        for kom in sorted(sumber_data["komoditas"].unique()):
+            s = mesin.deret_dari_tabel(harga, kom)
+            if mesin.bulan_sama_di_ujung(s) >= mesin.BULAN_MANDEK:
+                mandek_daftar.append(kom)
+                continue
+            latih, uji_s = s.iloc[:-mesin.MUSIM], s.iloc[-mesin.MUSIM:]
+            try:
+                r = mesin.pasang_hw(latih, True).forecast(mesin.MUSIM)
+                baris.append({"Komoditas": kom,
+                              "Kelompok": sumber_data.loc[
+                                  sumber_data["komoditas"] == kom,
+                                  "kelompok"].iloc[0],
+                              "MAPE": mesin.ukur(uji_s.values, r.values)["MAPE"]})
+            except Exception:
+                continue
+        tabel = (pd.DataFrame(baris).sort_values("MAPE")
+                 .reset_index(drop=True))
+        return tabel, mandek_daftar
 
-if st.button("Hitung ketepatan untuk semua komoditas"):
-    semua = ketepatan_semua(hanya_pangan)
-    urut = semua.sort_values("MAPE", ascending=False)
-    fig = go.Figure(go.Bar(
-        x=urut["MAPE"], y=urut["Komoditas"], orientation="h",
-        marker=dict(color=[WARNA["seri2"] if k == komoditas
-                           else WARNA["seri1"] for k in urut["Komoditas"]],
-                    line=dict(width=0)),
-        customdata=urut[["Kelompok"]],
-        hovertemplate="<b>%{y}</b><br>%{customdata[0]}"
-                      "<br>MAPE %{x:.2f}%<extra></extra>"))
-    fig.add_vline(x=10, line_width=1, line_dash="dash",
-                  line_color=WARNA["naik"])
-    fig.update_xaxes(ticksuffix="%")
-    st.plotly_chart(gaya_titik(fig, 60 + 22 * len(urut)),
-                    use_container_width=True)
-    bisa = int((semua["MAPE"] < 10).sum())
-    st.caption(
-        f"Garis merah putus-putus pada 10% adalah ambang yang lazim dipakai: "
-        f"di bawahnya ramalan tergolong layak pakai. {bisa} dari "
-        f"{len(semua)} komoditas memenuhinya. Batang jingga menandai "
-        f"{komoditas}.")
+    if st.button("Hitung ketepatan untuk semua komoditas"):
+        semua, mandek_daftar = ketepatan_semua(hanya_pangan)
+        urut = semua.sort_values("MAPE", ascending=False)
+        fig = go.Figure(go.Bar(
+            x=urut["MAPE"], y=urut["Komoditas"], orientation="h",
+            marker=dict(color=[WARNA["seri2"] if k == komoditas
+                               else WARNA["seri1"] for k in urut["Komoditas"]],
+                        line=dict(width=0)),
+            customdata=urut[["Kelompok"]],
+            hovertemplate="<b>%{y}</b><br>%{customdata[0]}"
+                          "<br>MAPE %{x:.2f}%<extra></extra>"))
+        fig.add_vline(x=10, line_width=1, line_dash="dash",
+                      line_color=WARNA["naik"])
+        fig.update_xaxes(ticksuffix="%")
+        st.plotly_chart(gaya_titik(fig, 60 + 22 * len(urut)),
+                        use_container_width=True)
+        bisa = int((semua["MAPE"] < 10).sum())
+        st.caption(
+            f"Garis merah putus-putus pada 10% adalah ambang yang lazim dipakai: "
+            f"di bawahnya ramalan tergolong layak pakai. {bisa} dari "
+            f"{len(semua)} komoditas memenuhinya. Batang jingga menandai "
+            f"{komoditas}.")
+        if mandek_daftar:
+            st.caption(
+                f"{len(mandek_daftar)} komoditas tidak diikutkan karena "
+                f"harganya tidak berubah selama {mesin.BULAN_MANDEK} bulan "
+                "terakhir atau lebih (kemungkinan data tidak diperbarui): "
+                + ", ".join(mandek_daftar) + ".")
 
 # --------------------------------------------------------------------------
 # Catatan
 # --------------------------------------------------------------------------
-bagian("Catatan", "Batas dari apa yang bisa diklaim")
+bagian("Catatan", "Hal yang perlu diingat")
 st.markdown(
     f"""
-- Yang diramalkan di halaman ini adalah **harga komoditas**, bukan angka
-  inflasi. Keduanya berkaitan erat — halaman Harga Pangan menunjukkan
-  korelasinya +0,783 — tetapi hubungan itu bersamaan waktu, bukan
-  mendahului. Jadi ramalan ini memberi gambaran arah tekanan harga, bukan
-  ramalan inflasi Kabupaten Bojonegoro.
-- Pengujian dilakukan sekali, pada {PANJANG_UJI} bulan terakhir. Cara yang
-  lebih ketat adalah pengujian bergulir (*rolling origin*), yaitu mengulang
-  pengujian pada beberapa titik potong yang berbeda. Itu belum dilakukan di
-  sini karena akan memperlambat halaman.
-- Ordo SARIMA dipilih dari enam calon tetap berdasarkan AIC, bukan
-  pencarian menyeluruh. Pilihan ini membuat hasilnya bisa diulang orang
-  lain, dengan risiko ada ordo lebih baik yang tidak tercoba. Ordonya
-  dipilih hanya dengan melihat data latih, lalu dipakai apa adanya pada
-  model akhir — supaya data uji benar-benar tidak pernah ikut menentukan
-  bentuk model.
-- Selang kepercayaan dihitung dengan anggapan galat model menyebar normal.
-  Pada komoditas yang harganya sering melonjak tajam, anggapan itu lemah,
-  sehingga selangnya cenderung terlalu sempit.
-- Ramalan tidak memperhitungkan kejadian luar biasa: gagal panen, perubahan
-  kebijakan impor, atau gangguan pasokan. Semua model di sini hanya belajar
-  dari pola masa lalu.
+- **Yang diramalkan adalah harga komoditas, bukan angka inflasi.** Keduanya
+  berkaitan erat (halaman Harga Pangan menunjukkan keeratan hubungannya),
+  tetapi terjadi pada bulan yang sama, bukan satu mendahului yang lain. Jadi
+  ini gambaran arah harga, bukan ramalan inflasi Kabupaten Bojonegoro.
+- **Ujiannya baru dilakukan sekali**, pada {uji_n} bulan terakhir. Cara yang
+  lebih ketat adalah mengulang ujian di beberapa titik waktu berbeda; itu
+  belum dilakukan agar halaman tidak lambat.
+- **Pengaturan model dibatasi pada beberapa pilihan tetap** supaya hasilnya
+  bisa diulang orang lain. Bisa jadi ada pengaturan yang lebih baik yang
+  tidak tercoba. Pemilihannya hanya memakai data latih, sehingga data uji
+  benar-benar tidak ikut menentukan.
+- **Rentang kemungkinan (pita biru) dihitung dengan anggapan** kesalahan
+  tebakan menyebar merata. Pada komoditas yang harganya sering melonjak
+  tajam, anggapan itu kurang pas, sehingga pita bisa terlalu sempit.
+- **Kejadian luar biasa tidak diperhitungkan:** gagal panen, perubahan
+  kebijakan impor, atau gangguan pasokan. Semua cara menebak di sini hanya
+  belajar dari pola masa lalu.
+- **Harga yang tidak berubah berbulan-bulan tidak diramal.** Itu biasanya
+  tanda data tidak diperbarui di sumbernya, bukan tanda harga yang stabil.
 """)
 
 sumber(
-    "Data: SISKAPERBAPO, Dinas Perindustrian dan Perdagangan Provinsi Jawa "
-    "Timur, diolah. Pemodelan menggunakan statsmodels — SARIMAX untuk SARIMA "
-    "dan ETSModel untuk Holt-Winters.")
+    "Data bawaan: SISKAPERBAPO, Dinas Perindustrian dan Perdagangan Provinsi "
+    "Jawa Timur, diolah. Data unggahan sepenuhnya milik pengunggah dan tidak "
+    "disimpan oleh dashboard. Pemodelan menggunakan statsmodels: SARIMAX "
+    "untuk SARIMA dan ETSModel untuk Holt-Winters.")

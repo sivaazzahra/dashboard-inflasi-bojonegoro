@@ -37,7 +37,7 @@ terkini = harga[harga["periode"] == bulan_akhir]
 # Penyaring
 # --------------------------------------------------------------------------
 with st.sidebar:
-    st.markdown("### Penyaring")
+    st.markdown("### Atur tampilan")
     hanya_pangan = st.toggle("Hanya kelompok pangan", value=True,
                              help="Mematikannya akan memunculkan bahan "
                                   "bangunan dan pupuk.")
@@ -60,8 +60,8 @@ satu = harga[(harga["komoditas"] == komoditas)
              & (harga["periode"].dt.year <= th_akhir)].sort_values("periode")
 
 kepala("Harga Pangan di Pasar Bojonegoro",
-       "Harga komoditas pokok yang dipantau harian, diringkas per bulan — "
-       "penggerak di balik angka inflasi kelompok makanan.",
+       "Harga bahan pokok yang dipantau tiap hari, diringkas per bulan. "
+       "Inilah yang menggerakkan kenaikan harga makanan.",
        f"{harga.komoditas.nunique()} komoditas · "
        f"{harga.periode.nunique()} bulan · sampai {nama_bulan(bulan_akhir)}",
        latar="latar_harga")
@@ -79,22 +79,22 @@ k1, k2, k3, k4 = st.columns(4)
 kartu(k1, f"Harga {komoditas} terkini", rupiah(baris_akhir["harga"]),
       f"{nama_bulan(baris_akhir['periode'])} · "
       f"{persen(baris_akhir['perubahan_mom_pct'])} dari bulan lalu")
-kartu(k2, "Perubahan setahun (y-on-y)",
+kartu(k2, "Perubahan harga dalam setahun",
       persen(baris_akhir["perubahan_yoy_pct"]),
       "dibanding bulan yang sama tahun lalu")
-kartu(k3, "Komoditas berstatus waspada", f"{len(waspada)} dari {len(terkini)}",
-      "harga menyimpang lebih dari 15% dari rata-rata 12 bulannya")
-kartu(k4, "Paling bergejolak", tergejolak["komoditas"],
-      f"simpangan baku perubahan bulanan {angka(tergejolak['volatilitas_pct'])}%",
+kartu(k3, "Harga yang perlu diwaspadai", f"{len(waspada)} dari {len(terkini)}",
+      "harganya lebih dari 15% di atas atau di bawah rata-rata setahun terakhir")
+kartu(k4, "Paling naik-turun", tergejolak["komoditas"],
+      f"harganya naik-turun sekitar {angka(tergejolak['volatilitas_pct'])}% tiap bulan",
       kecil=True)
 
 # --------------------------------------------------------------------------
 # 1. Tren harga satu komoditas
 # --------------------------------------------------------------------------
 bagian("Perkembangan", f"Harga {komoditas}, {th_awal}–{th_akhir}",
-       "Garis biru adalah harga bulanan, garis putus-putus adalah rata-rata "
-       "bergerak 12 bulan sebagai patokan harga normalnya. Jarak antara "
-       "keduanya itulah yang dipakai menandai status waspada.")
+       "Garis biru adalah harga tiap bulan; garis putus-putus adalah rata-rata "
+       "setahun terakhir sebagai patokan harga \"normal\". Kalau garis biru "
+       "jauh di atas atau di bawah garis putus-putus, harganya sedang tidak biasa.")
 
 fig = go.Figure()
 fig.add_trace(go.Scatter(
@@ -133,7 +133,7 @@ butir = [
     f"Harga bulan terakhir berada <b>{angka(abs(selisih_normal), 1)}% "
     f"{'di atas' if selisih_normal >= 0 else 'di bawah'}</b> rata-rata 12 "
     f"bulannya, berstatus <b>{baris_akhir['status']}</b>.",
-    f"Sebaran harga ({angka(cv, 1)}% dari rata-ratanya) tergolong "
+    f"Naik-turun harga ({angka(cv, 1)}% dari harga rata-ratanya) tergolong "
     + ("kecil, harganya relatif stabil." if cv < 10
        else "sedang, ada naik-turun yang cukup terasa." if cv < 25
        else "besar, harganya mudah melonjak.")
@@ -144,8 +144,8 @@ wawasan("Temuan", butir)
 # 2. Peringkat gejolak
 # --------------------------------------------------------------------------
 bagian("Peringkat", "Komoditas mana yang paling bergejolak",
-       "Diukur dengan simpangan baku perubahan harga bulanan. Makin tinggi "
-       "angkanya, makin sulit harganya diramalkan — dan makin perlu "
+       "Diukur dari seberapa besar harga berubah tiap bulan. Makin tinggi "
+       "angkanya, makin sulit ditebak harganya, dan makin perlu "
        "diawasi menjelang hari besar.")
 
 peringkat = (sumber_pilihan.drop_duplicates("komoditas")
@@ -191,7 +191,7 @@ wawasan("Temuan", [
     f"<b>{kelompok_gejolak.index[0]}</b> ({angka(kelompok_gejolak.iloc[0], 1)}%), "
     f"yang paling tenang <b>{kelompok_gejolak.index[-1]}</b> "
     f"({angka(kelompok_gejolak.iloc[-1], 1)}%).",
-    f"Komoditas termudah berubah adalah <b>{semua_peringkat.loc[0, 'komoditas']}</b> "
+    f"Komoditas yang paling mudah berubah harganya adalah <b>{semua_peringkat.loc[0, 'komoditas']}</b> "
     f"({angka(semua_peringkat.loc[0, 'volatilitas_pct'], 1)}%), sedangkan yang "
     f"paling stabil <b>{semua_peringkat.loc[len(semua_peringkat) - 1, 'komoditas']}</b> "
     f"({angka(semua_peringkat.loc[len(semua_peringkat) - 1, 'volatilitas_pct'], 1)}%). "
@@ -204,9 +204,8 @@ wawasan("Temuan", [
 # --------------------------------------------------------------------------
 bagian("Musiman", f"Pola bulanan {komoditas}",
        "Tiap baris satu tahun, tiap kolom satu bulan. Kalau warna merah "
-       "berulang di kolom yang sama tiap tahun, berarti ada pola musiman "
-       "yang bisa diantisipasi — dan itulah yang dimanfaatkan pada "
-       "halaman peramalan.")
+       "muncul di bulan yang sama tiap tahun, artinya ada pola musiman "
+       "(misalnya naik menjelang hari raya) yang bisa diantisipasi.")
 
 musim = satu.copy()
 musim["tahun"] = musim["periode"].dt.year
@@ -223,7 +222,7 @@ fig = go.Figure(go.Heatmap(
     colorscale=[[0.0, WARNA["turun"]], [0.5, WARNA["netral"]],
                 [1.0, WARNA["naik"]]],
     zmid=0, zmin=-batas_m, zmax=batas_m, xgap=2, ygap=2,
-    colorbar=dict(title=dict(text="% m-to-m", side="right"),
+    colorbar=dict(title=dict(text="% per bulan", side="right"),
                   thickness=11, outlinewidth=0, tickfont=dict(size=10),
                   ticksuffix="%"),
     hovertemplate="%{y} %{x}<br>%{z:+.2f}%<extra></extra>"))
@@ -243,11 +242,11 @@ if rata_bulan.notna().any():
 # --------------------------------------------------------------------------
 # 4. Hubungan dengan inflasi resmi
 # --------------------------------------------------------------------------
-bagian("Pembuktian", "Apakah harga pasar sejalan dengan inflasi BPS",
-       "Sumbu datar adalah perubahan indeks harga pangan yang dihitung dari "
-       "data pasar; sumbu tegak adalah inflasi kelompok makanan versi BPS. "
-       "Kalau titik-titiknya membentuk garis menanjak, berarti kedua sumber "
-       "memang mengukur gejala yang sama.")
+bagian("Pembuktian", "Apakah harga pasar sejalan dengan angka resmi BPS",
+       "Tiap titik adalah satu bulan. Makin ke kanan, harga di pasar naik "
+       "makin tinggi. Makin ke atas, kenaikan harga makanan menurut BPS "
+       "makin tinggi. Kalau titik-titik membentuk garis menanjak, berarti "
+       "harga pasar dan angka resmi BPS memang bergerak seirama.")
 
 v = jembatan.dropna(subset=["harga_pangan_mom", "inflasi_makanan_mom"])
 r = float(v["harga_pangan_mom"].corr(v["inflasi_makanan_mom"]))
@@ -275,39 +274,38 @@ with kiri:
                       "<br>inflasi makanan %{y:+.2f}%<extra></extra>"))
     fig.add_hline(y=0, line_width=1, line_color=WARNA["garis"])
     fig.add_vline(x=0, line_width=1, line_color=WARNA["garis"])
-    fig.update_xaxes(title="Perubahan indeks harga pangan (%)", ticksuffix="%")
-    fig.update_yaxes(title="Inflasi kelompok makanan BPS (%)", ticksuffix="%")
+    fig.update_xaxes(title="Perubahan harga pangan di pasar (%)", ticksuffix="%")
+    fig.update_yaxes(title="Kenaikan harga makanan menurut BPS (%)", ticksuffix="%")
     st.plotly_chart(gaya_titik(fig, 380), use_container_width=True)
 
 with kanan:
-    kartu(st, "Koefisien korelasi (r)", angka(r, 3, tanda=True),
-          f"dihitung dari {len(v)} bulan yang beririsan")
+    kartu(st, "Keeratan hubungan (r)", angka(r, 3, tanda=True),
+          f"dihitung dari {len(v)} bulan; makin dekat ke +1, makin seirama")
     st.markdown("")
-    kartu(st, "Keterjelasan (R²)", angka(r ** 2 * 100, 1) + "%",
-          "bagian naik-turunnya inflasi makanan yang terjelaskan "
-          "oleh pergerakan harga pasar")
+    kartu(st, "Seberapa terjelaskan (R²)", angka(r ** 2 * 100, 1) + "%",
+          "bagian naik-turunnya harga makanan versi BPS yang bisa "
+          "dijelaskan oleh harga pasar")
     st.markdown("")
-    kartu(st, "Kemiringan garis", angka(kemiringan, 3),
-          "setiap 1% kenaikan indeks harga pangan sejalan dengan kenaikan "
-          f"inflasi makanan sekitar {angka(kemiringan, 2)} persen",
+    kartu(st, "Pengaruh harga pasar", angka(kemiringan, 3),
+          "setiap 1% kenaikan harga pangan di pasar sejalan dengan kenaikan "
+          f"harga makanan versi BPS sekitar {angka(kemiringan, 2)} persen",
           kecil=True)
 
 bacaan(
-    f"Korelasinya <b>{angka(r, 3, tanda=True)}</b> dan tergolong "
+    f"Keeratan hubungannya <b>{angka(r, 3, tanda=True)}</b>, tergolong "
     f"<b>{'kuat' if abs(r) >= 0.7 else 'sedang' if abs(r) >= 0.4 else 'lemah'}</b>. "
-    f"Artinya data harga pasar Disperindag memang bergerak searah dengan "
-    "inflasi kelompok makanan versi BPS, sehingga layak dipakai sebagai "
-    "penanda dini. Satu catatan penting: hubungan ini bersifat "
-    "<b>bersamaan waktu</b>, bukan mendahului. Harga pasar tidak meramalkan "
-    "inflasi bulan depan, tetapi memberi gambaran inflasi bulan berjalan "
-    "jauh sebelum angka resminya terbit.")
+    f"Artinya harga pasar (data Disperindag) bergerak searah dengan angka "
+    "resmi BPS untuk makanan, sehingga bisa dipakai sebagai tanda awal. "
+    "Catatan penting: hubungan ini terjadi <b>pada bulan yang sama</b>, "
+    "bukan mendahului. Harga pasar tidak meramal inflasi bulan depan, tetapi "
+    "sudah memberi gambaran bulan ini jauh sebelum angka resmi terbit.")
 
 # Contoh nyata untuk menjelaskan keterkaitan
 sama_arah = int(((v["harga_pangan_mom"] > 0) == (v["inflasi_makanan_mom"] > 0)).sum())
 istilah(
     f"<b>Cara membaca R².</b> Nilai {angka(r ** 2 * 100, 1)}% berarti sekitar "
-    f"{angka(r ** 2 * 100, 0)} dari tiap 100 bagian naik-turunnya inflasi "
-    "makanan BPS bisa dijelaskan oleh pergerakan harga pasar. Sisanya berasal "
+    f"{angka(r ** 2 * 100, 0)} dari tiap 100 bagian naik-turunnya harga "
+    "makanan versi BPS bisa dijelaskan oleh pergerakan harga pasar. Sisanya berasal "
     "dari hal yang tidak terpantau di data harga ini, seperti komoditas lain "
     f"dan perbedaan cara hitung. Pada {len(v)} bulan, kedua angka searah "
     f"(sama-sama naik atau sama-sama turun) di <b>{sama_arah} bulan</b>.")
@@ -316,9 +314,9 @@ istilah(
 # 5. Tabel status
 # --------------------------------------------------------------------------
 bagian("Pemantauan", f"Status harga per {nama_bulan(bulan_akhir)}",
-       "Status dihitung dari jarak harga saat ini terhadap rata-rata 12 "
-       "bulannya: lebih dari 15% disebut waspada, lebih dari 7% disebut "
-       "naik atau turun.")
+       "Status dilihat dari seberapa jauh harga sekarang dari rata-rata "
+       "setahun terakhir: lebih dari 15% disebut \"waspada\", lebih dari 7% "
+       "disebut \"naik\" atau \"turun\", selebihnya \"normal\".")
 
 ringkas = terkini["status"].value_counts()
 urutan = ["Waspada naik", "Naik", "Normal", "Turun", "Waspada turun"]
