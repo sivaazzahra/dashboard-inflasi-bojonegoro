@@ -331,8 +331,9 @@ button[data-testid="stExpandSidebarButton"] span { color: %(aksen)s !important; 
 /* Perbaikan kontras di menu samping: tulisan di kotak putih harus gelap */
 [data-testid="stSidebarCollapseButton"] button, [data-testid="stSidebarCollapseButton"] button * { color: #123a6b !important; }
 [data-testid="stSidebar"] [data-baseweb="select"] > div { background: #fff; }
-[data-testid="stSidebar"] [data-baseweb="select"] div, [data-testid="stSidebar"] [data-baseweb="select"] input,
-[data-testid="stSidebar"] [data-baseweb="select"] svg { color: #101828 !important; fill: #101828 !important; }
+[data-testid="stSidebar"] [data-baseweb="select"] *, [data-testid="stSidebar"] [data-baseweb="select"] input,
+[data-testid="stSidebar"] [data-baseweb="select"] svg { color: #101828 !important; fill: #101828 !important; -webkit-text-fill-color: #101828 !important; opacity: 1 !important; }
+[data-testid="stSidebar"] [data-baseweb="select"] input::placeholder { color: #667085 !important; -webkit-text-fill-color: #667085 !important; }
 [data-testid="stSidebar"] [data-baseweb="tag"], [data-testid="stSidebar"] [data-baseweb="tag"] * { color: #fff !important; }
 
 /* Sentuhan tampilan: kartu sedikit terangkat saat disentuh, garis aksen di
@@ -350,8 +351,9 @@ button[data-testid="stExpandSidebarButton"] span { color: %(aksen)s !important; 
 [data-testid="stSidebarCollapseButton"] button { background: rgba(255,255,255,0.16) !important; border: none !important; box-shadow: none !important; }
 [data-testid="stSidebarCollapseButton"] button, [data-testid="stSidebarCollapseButton"] button * { color: #ffffff !important; }
 [data-testid="stSidebar"] [data-baseweb="select"] > div { background: #fff; }
-[data-testid="stSidebar"] [data-baseweb="select"] div, [data-testid="stSidebar"] [data-baseweb="select"] input,
-[data-testid="stSidebar"] [data-baseweb="select"] svg { color: #101828 !important; fill: #101828 !important; }
+[data-testid="stSidebar"] [data-baseweb="select"] *, [data-testid="stSidebar"] [data-baseweb="select"] input,
+[data-testid="stSidebar"] [data-baseweb="select"] svg { color: #101828 !important; fill: #101828 !important; -webkit-text-fill-color: #101828 !important; opacity: 1 !important; }
+[data-testid="stSidebar"] [data-baseweb="select"] input::placeholder { color: #667085 !important; -webkit-text-fill-color: #667085 !important; }
 [data-testid="stSidebar"] [data-baseweb="tag"], [data-testid="stSidebar"] [data-baseweb="tag"] * { color: #fff !important; }
 [data-testid="stSidebar"] [data-testid="stFileUploader"] section { background: rgba(255,255,255,0.10); }
 [data-testid="stSidebar"] [data-testid="stFileUploader"] small, [data-testid="stSidebar"] [data-testid="stFileUploader"] span { color: #fff; }
