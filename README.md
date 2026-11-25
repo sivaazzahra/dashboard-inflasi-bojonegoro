@@ -4,9 +4,10 @@ Dashboard interaktif yang menggabungkan statistik inflasi resmi BPS Kabupaten
 Bojonegoro dengan pemantauan harga pangan harian dari SISKAPERBAPO Jawa Timur,
 lalu memproyeksikan harga beberapa bulan ke depan.
 
-Disusun sebagai keluaran kegiatan Magang Mandiri MBKM, Program Studi Sains
-Data, Universitas Pembangunan Nasional Veteran Jawa Timur, di BPS Kabupaten
-Bojonegoro. **Bukan publikasi resmi BPS.** Angka resmi inflasi Kabupaten
+Disusun sebagai proyek mata kuliah **Kecerdasan Bisnis** dan **Data
+Storytelling**, Program Studi Sains Data, Universitas Pembangunan Nasional
+Veteran Jawa Timur, dengan data dari BPS Kabupaten Bojonegoro dan
+SISKAPERBAPO. **Bukan publikasi resmi BPS.** Angka resmi inflasi Kabupaten
 Bojonegoro tetap mengacu pada Berita Resmi Statistik yang diterbitkan BPS
 Kabupaten Bojonegoro.
 
@@ -30,6 +31,8 @@ resminya tersedia.
 | Inflasi | Seberapa tinggi, dan dari kelompok mana? | deskriptif |
 | Harga Pangan | Komoditas apa penggeraknya? | diagnostik |
 | Peramalan | Ke mana arahnya? | prediktif |
+| Kesimpulan | Apa artinya, dan apa yang sebaiknya dilakukan? | preskriptif |
+| Metode | Bagaimana angkanya dibuat dan diuji? | transparansi |
 
 ---
 
@@ -65,11 +68,25 @@ uji:
 
 Pemenang ditentukan dengan MAPE, lalu dipasang ulang memakai seluruh data
 sebelum meramal ke depan. Pembanding naif disertakan agar terlihat apakah
-pemodelan memang memberi nilai tambah.
+pemodelan memang memberi nilai tambah. Bila pembanding naif menang, ramalan
+memakai metode statistik terbaik berikutnya dan hal itu dinyatakan di halaman.
 
-Hasil pengujian pada 40 komoditas pangan: SARIMA unggul pada 19 komoditas,
-Holt-Winters pada 21. Ketepatannya sangat beragam — dari MAPE di bawah 1%
-untuk beras hingga di atas 60% untuk cabe.
+Pengaturan di dalam tiap model dipilih dari data latih saja, tetapi pemenang di
+antara tiga metode dipilih dari data uji yang sama dengan yang dilaporkan,
+sehingga MAPE pemenang cenderung sedikit lebih optimistis.
+
+Komoditas yang harganya tidak berubah selama enam bulan atau lebih tidak
+diramal, karena kemungkinan besar datanya tidak diperbarui di sumber.
+
+Kelayakan model diperiksa dengan tiga uji standar deret waktu: uji
+stasioneritas ADF (praproses), grafik ACF dan PACF (visualisasi), dan uji
+Ljung-Box pada sisaan SARIMA (validasi).
+
+Halaman Peramalan juga menerima **data unggahan sendiri** (CSV atau Excel,
+minimal 24 bulan) dan menyediakan unduhan hasil dalam bentuk Excel dan CSV.
+
+Ketepatan sangat beragam antarkomoditas: komoditas bergejolak seperti cabe
+paling sulit diramal. Angka per komoditas tersedia di halaman Peramalan.
 
 ---
 
@@ -79,6 +96,7 @@ untuk beras hingga di atas 60% untuk cabe.
 dashboard-bps/
 ├── Beranda.py              # pintu masuk aplikasi
 ├── alat.py                 # pemuatan data, warna, dan komponen tampilan
+├── mesin_ramal.py          # mesin peramalan dan pembacaan data unggahan
 ├── siapkan_data.py         # ETL: data mentah menjadi data siap pakai
 ├── requirements.txt
 ├── .streamlit/config.toml
@@ -86,7 +104,9 @@ dashboard-bps/
 ├── pages/
 │   ├── 1_Inflasi.py
 │   ├── 2_Harga_Pangan.py
-│   └── 3_Peramalan.py
+│   ├── 3_Peramalan.py
+│   ├── 4_Kesimpulan.py
+│   └── 5_Metode.py
 └── data/
     ├── mentah/             # berkas asli dari sumber
     └── siap/               # keluaran siapkan_data.py
