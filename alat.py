@@ -549,11 +549,12 @@ def kartu(kolom, label: str, nilai: str, keterangan: str = "",
 # Keterangan status karya. Dipasang di kaki setiap halaman supaya dashboard
 # berlogo ini tidak terbaca sebagai terbitan resmi BPS.
 PENAFIAN = (
-    "Dashboard ini disusun sebagai keluaran kegiatan Magang Mandiri MBKM "
-    "Program Studi Sains Data, Universitas Pembangunan Nasional Veteran Jawa "
-    "Timur, di BPS Kabupaten Bojonegoro. Bukan publikasi resmi BPS. Angka "
-    "resmi inflasi Kabupaten Bojonegoro tetap mengacu pada Berita Resmi "
-    "Statistik yang diterbitkan BPS Kabupaten Bojonegoro."
+    "Dashboard ini disusun sebagai proyek mata kuliah Kecerdasan Bisnis dan "
+    "Data Storytelling, Program Studi Sains Data, Universitas Pembangunan "
+    "Nasional Veteran Jawa Timur, dengan data dari BPS Kabupaten Bojonegoro "
+    "dan SISKAPERBAPO. Bukan publikasi resmi BPS. Angka resmi inflasi "
+    "Kabupaten Bojonegoro tetap mengacu pada Berita Resmi Statistik yang "
+    "diterbitkan BPS Kabupaten Bojonegoro."
 )
 
 
