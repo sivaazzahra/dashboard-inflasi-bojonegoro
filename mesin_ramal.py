@@ -335,3 +335,68 @@ def hitung(deret: pd.Series, langkah: int) -> dict:
             "uji": hasil_uji, "ukuran": tabel_ukuran, "ordo": ordo_terpilih,
             "pemenang": pemenang, "metode_ramalan": metode_ramalan,
             "ramalan": ramalan}
+
+
+# --------------------------------------------------------------------------
+# Pemeriksaan model (praproses dan validasi ala analisis deret waktu)
+# --------------------------------------------------------------------------
+def periksa_model(deret: pd.Series) -> dict:
+    """Tiga pemeriksaan standar pada deret waktu:
+      1. uji stasioneritas ADF pada data asli dan setelah diselisih;
+      2. ACF dan PACF pada data yang sudah diselisih;
+      3. uji Ljung-Box pada sisaan SARIMA (apakah masih ada pola tersisa).
+    Setiap pemeriksaan dibungkus sendiri-sendiri: bila satu gagal, yang lain
+    tetap jalan dan hasilnya kosong (None) untuk yang gagal."""
+    from statsmodels.tsa.stattools import acf, adfuller, pacf
+    from statsmodels.stats.diagnostic import acorr_ljungbox
+
+    y = deret.astype(float)
+    n = len(y)
+    hasil = {"adf": [], "acf": None, "pacf": None, "lag": None, "batas": None,
+             "ljung": None, "sisa": None, "ordo": None}
+
+    d1 = y.diff().dropna()
+    kandidat = [("Data asli (harga)", y),
+                ("Setelah selisih bulanan (d=1)", d1)]
+    if n >= 36:
+        kandidat.append(("Selisih bulanan, lalu selisih tahunan (d=1, D=1)",
+                         d1.diff(MUSIM).dropna()))
+    for nama, seri in kandidat:
+        try:
+            if seri.nunique() < 3 or len(seri) < 10:
+                continue
+            stat, pnilai = adfuller(seri, autolag="AIC")[:2]
+            hasil["adf"].append({"Perlakuan": nama,
+                                 "Statistik ADF": float(stat),
+                                 "p-value": float(pnilai),
+                                 "Stasioner": bool(pnilai < 0.05)})
+        except Exception:
+            continue
+
+    try:
+        lag = int(min(24, len(d1) // 2 - 1))
+        hasil["acf"] = np.asarray(acf(d1, nlags=lag, fft=False))[1:]
+        hasil["pacf"] = np.asarray(pacf(d1, nlags=lag))[1:]
+        hasil["lag"] = lag
+        hasil["batas"] = float(1.96 / np.sqrt(len(d1)))
+    except Exception:
+        pass
+
+    try:
+        terbaik = pasang_sarima(y, n >= 36)
+        if terbaik is not None:
+            _, ordo, ordo_musiman, model = terbaik
+            buang = max(1, int(ordo[1] + ordo_musiman[1] * ordo_musiman[3]))
+            sisa = model.resid.iloc[buang:]
+            lag_lb = int(max(1, min(12, len(sisa) // 4)))
+            lb = acorr_ljungbox(sisa, lags=[lag_lb], return_df=True)
+            pnilai = float(lb["lb_pvalue"].iloc[0])
+            hasil["ljung"] = {"lag": lag_lb, "p": pnilai, "acak": pnilai > 0.05,
+                              "n": int(len(sisa))}
+            hasil["sisa"] = pd.DataFrame({"periode": sisa.index,
+                                          "sisa": sisa.values})
+            hasil["ordo"] = (f"SARIMA{ordo}{ordo_musiman}"
+                             .replace(" ", "").replace(",)", ")"))
+    except Exception:
+        pass
+    return hasil
