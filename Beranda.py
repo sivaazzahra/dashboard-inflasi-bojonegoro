@@ -8,13 +8,19 @@ Berkas inilah yang dijalankan untuk menyalakan dashboard:
 
 Halaman-halaman lain berada di folder pages/ dan otomatis muncul
 di menu sebelah kiri, berurutan sesuai angka di depan namanya.
+
+Beranda sengaja tidak mengulang isi halaman lain. Ia hanya menjawab tiga
+hal: bagaimana keadaan hari ini, apa artinya bagi orang awam, dan dari
+mana sebaiknya pembaca mulai.
 """
 
 import streamlit as st
 
-from alat import (angka, atur_halaman, bacaan, bagian, kartu, kepala, muat_harga,
-                  muat_inflasi, navigasi, muat_jembatan, nama_bulan, periksa_data,
-                  persen, sumber, wawasan)
+from alat import (CATATAN_SASARAN, SASARAN_ATAS, SASARAN_BAWAH, SASARAN_TENGAH,
+                  angka, angka_gerak, atur_halaman, bacaan, bagian,
+                  catatan_kaki, info, istilah, kartu, kepala, muat_harga,
+                  muat_inflasi, muat_jembatan, nama_bulan, periksa_data, persen,
+                  pengukur_sasaran, pil, rupiah, status_sasaran, sumber)
 
 atur_halaman("Beranda")
 
@@ -27,143 +33,126 @@ jembatan = muat_jembatan()
 
 umum = inflasi[inflasi["adalah_umum"]].sort_values("periode")
 terakhir = umum.iloc[-1]
-pangan_terakhir = harga["periode"].max()
+yoy = float(terakhir["inflasi_yoy"])
+bulan_ini = nama_bulan(terakhir["periode"])
+bulan_lalu_tahun = nama_bulan(terakhir["periode"].replace(
+    year=terakhir["periode"].year - 1))
+status_teks, status_warna = status_sasaran(yoy)
 
 kepala(
-    "Pemantauan Inflasi dan Harga Pangan",
-    "Kabupaten Bojonegoro · menggabungkan statistik inflasi resmi BPS dengan "
-    "pemantauan harga pasar harian",
-    f"Data inflasi sampai {nama_bulan(terakhir['periode'])} · "
-    f"harga pangan sampai {nama_bulan(pangan_terakhir)}",
+    "Seberapa Cepat Harga Naik di Bojonegoro?",
+    "Pantau inflasi resmi BPS dan harga pasar harian dalam satu tempat, "
+    "dijelaskan dengan bahasa yang mudah dipahami semua orang.",
+    f"Data inflasi sampai {bulan_ini} · "
+    f"harga pangan sampai {nama_bulan(harga['periode'].max())}",
     latar="latar_beranda")
-navigasi()
 
 # --------------------------------------------------------------------------
-# Angka utama
+# Keadaan hari ini
 # --------------------------------------------------------------------------
-bagian("Posisi terakhir", f"Inflasi {nama_bulan(terakhir['periode'])}")
+bagian("Kabar terbaru", f"Bagaimana harga-harga per {bulan_ini}?")
 
-k1, k2, k3, k4 = st.columns(4)
-kartu(k1, "Inflasi bulanan (m-to-m)", persen(terakhir["inflasi_mom"]),
-      "dibanding bulan sebelumnya")
-kartu(k2, "Inflasi tahunan (y-on-y)", persen(terakhir["inflasi_yoy"]),
-      "dibanding bulan yang sama tahun lalu")
-kartu(k3, "Inflasi tahun berjalan (y-to-d)", persen(terakhir["inflasi_ytd"]),
-      "dibanding Desember tahun lalu")
+kiri, kanan = st.columns([1, 1.15])
 
-# Dihitung ulang tiap kali data diperbarui, bukan ditulis tetap
-penyumbang = (inflasi[(inflasi["periode"] == terakhir["periode"])
-                      & (~inflasi["adalah_umum"])]
-              .sort_values("andil_yoy", ascending=False).iloc[0])
-kartu(k4, "Penyumbang inflasi terbesar", penyumbang["kelompok_pendek"],
-      f"menyumbang {penyumbang['andil_yoy']:.2f} dari "
-      f"{terakhir['inflasi_yoy']:.2f} poin".replace(".", ","),
-      kecil=True)
+with kiri:
+    pengukur_sasaran(
+        yoy, "Kenaikan harga setahun terakhir",
+        f"dibanding {bulan_lalu_tahun}")
 
-bagi = penyumbang["andil_yoy"] / terakhir["inflasi_yoy"] * 100
-bacaan(
-    f"Dari inflasi tahunan sebesar <b>{persen(terakhir['inflasi_yoy'])}</b>, "
-    f"sebanyak <b>{penyumbang['andil_yoy']:.2f} poin</b> ".replace(".", ",")
-    + f"atau sekitar <b>{bagi:.0f}%</b> berasal dari kelompok "
-      f"{penyumbang['kelompok']}. Karena itulah dashboard ini menaruh "
-      "perhatian khusus pada harga pangan: di situ sebagian besar tekanan "
-      "harga di Bojonegoro terbentuk.")
+with kanan:
+    contoh = 100_000 * (1 + yoy / 100)
+    arah = "lebih mahal" if yoy >= 0 else "lebih murah"
+    bacaan(
+        f"Rata-rata, harga barang dan jasa di Bojonegoro "
+        f"<b>{persen(abs(yoy), tanda=False)} {arah}</b> dibanding "
+        f"{bulan_lalu_tahun}. Artinya belanjaan yang setahun lalu seharga "
+        f"<b>Rp100.000</b>, sekarang kira-kira <b>{rupiah(contoh)}</b>.")
+    st.markdown(
+        f"<div style='margin:10px 2px 4px 2px;font-size:.88rem'>"
+        f"Posisi terhadap sasaran pemerintah: {pil(status_teks, status_warna)}"
+        f"{info('Sasaran inflasi IHK tahunan (YoY) periode 2025–2027 sebesar 2,5% ± 1% (1,5%–3,5%), mengacu pada Peraturan Menteri Keuangan (PMK) No. 31 Tahun 2024.')}"
+        f"</div>", unsafe_allow_html=True)
+    catatan_kaki(CATATAN_SASARAN)
 
-# --------------------------------------------------------------------------
-# Temuan utama — semuanya dihitung dari data, bukan ditulis tetap
-# --------------------------------------------------------------------------
-sebelumnya = umum.iloc[-2]
-arah = "naik" if terakhir["inflasi_yoy"] > sebelumnya["inflasi_yoy"] else "turun"
-tertinggi_yoy = umum.loc[umum["inflasi_yoy"].idxmax()]
-terendah_yoy = umum.loc[umum["inflasi_yoy"].idxmin()]
-bulan_deflasi = int((umum["inflasi_mom"] < 0).sum())
-
-rinci_akhir = inflasi[(inflasi["periode"] == terakhir["periode"])
-                      & (~inflasi["adalah_umum"])]
-paling_tinggi = rinci_akhir.sort_values("inflasi_yoy", ascending=False).iloc[0]
-
-pangan_kini = harga[(harga["periode"] == pangan_terakhir) & (harga["pangan"])]
-naik_waspada = pangan_kini[pangan_kini["status"] == "Waspada naik"]
-sah = jembatan.dropna(subset=["harga_pangan_mom", "inflasi_makanan_mom"])
-r = float(sah["harga_pangan_mom"].corr(sah["inflasi_makanan_mom"]))
-
-if paling_tinggi["kelompok"] == penyumbang["kelompok"]:
-    kalimat_kelompok = "sekaligus penyumbang terbesar."
-else:
-    kalimat_kelompok = (
-        f"tetapi penyumbang terbesarnya justru <b>{penyumbang['kelompok_pendek']}</b>, "
-        "karena bobot belanjanya jauh lebih besar. Laju kenaikan dan "
-        "sumbangan ke inflasi umum adalah dua hal yang berbeda.")
-
-if len(naik_waspada):
-    terjauh = naik_waspada.sort_values("simpangan_pct").iloc[-1]["komoditas"]
-    kalimat_waspada = f", paling jauh menyimpang: <b>{terjauh}</b>."
-else:
-    kalimat_waspada = "."
-
-butir = [
-    f"Inflasi tahunan <b>{arah}</b> dari {persen(sebelumnya['inflasi_yoy'])} "
-    f"({nama_bulan(sebelumnya['periode'])}) menjadi "
-    f"<b>{persen(terakhir['inflasi_yoy'])}</b>. Titik tertingginya sepanjang "
-    f"data {persen(tertinggi_yoy['inflasi_yoy'])} pada "
-    f"{nama_bulan(tertinggi_yoy['periode'])}, terendahnya "
-    f"{persen(terendah_yoy['inflasi_yoy'])} pada "
-    f"{nama_bulan(terendah_yoy['periode'])}.",
-    f"Dari {len(umum)} bulan yang tercatat, <b>{bulan_deflasi} bulan</b> "
-    "mengalami penurunan harga bulanan (deflasi). Inflasi di Bojonegoro "
-    "tidak naik lurus, melainkan bergelombang.",
-    f"Kelompok dengan inflasi tahunan tertinggi adalah "
-    f"<b>{paling_tinggi['kelompok_pendek']}</b> "
-    f"({persen(paling_tinggi['inflasi_yoy'])}), " + kalimat_kelompok,
-    f"Di pasar, <b>{len(naik_waspada)} dari {len(pangan_kini)}</b> komoditas "
-    f"pangan berstatus <i>waspada naik</i> pada "
-    f"{nama_bulan(pangan_terakhir)}" + kalimat_waspada,
-    f"Harga pasar dan inflasi makanan resmi bergerak searah (korelasi "
-    f"<b>{angka(r, 2, tanda=True)}</b>), sehingga harga harian layak dipakai "
-    "sebagai penanda dini sebelum angka BPS terbit.",
-]
-bagian("Temuan", "Apa yang bisa dibaca dari data ini")
-wawasan("Temuan utama", butir)
+# Angka yang menghitung naik. Sengaja hanya soal cakupan data, bukan angka
+# inflasi, supaya tidak mengulang kartu pada halaman Inflasi.
+angka_gerak([
+    dict(label="Bulan data inflasi resmi", nilai=int(inflasi.periode.nunique()),
+         ket="dari BPS Kabupaten Bojonegoro"),
+    dict(label="Kelompok pengeluaran", nilai=int(inflasi.kelompok.nunique()) - 1,
+         ket="makanan, transportasi, pendidikan, dll."),
+    dict(label="Komoditas dipantau", nilai=int(harga.komoditas.nunique()),
+         ket="harga pasar dari SISKAPERBAPO"),
+    dict(label="Catatan harga", nilai=int(len(harga)),
+         ket="per komoditas per bulan"),
+])
 
 # --------------------------------------------------------------------------
-# Isi dashboard
+# Inflasi yang baik itu seperti apa
 # --------------------------------------------------------------------------
-bagian("Isi", "Tiga halaman, tiga pertanyaan")
+bagian("Dasar-dasar", "Inflasi yang baik itu seperti apa?",
+       "Inflasi adalah kenaikan harga barang dan jasa secara umum. Menariknya, "
+       "inflasi yang ideal bukan nol: yang dicari adalah inflasi yang rendah "
+       "dan stabil.")
+
+a, b, c = st.columns(3)
+kartu(a, "Terlalu rendah · di bawah 1,5%",
+      "Harga melemah", "Bisa jadi tanda belanja masyarakat lesu. Pedagang dan "
+      "petani menerima harga yang tertekan.", kecil=True)
+kartu(b, "Sehat · 1,5% sampai 3,5%",
+      "Dalam sasaran", "Harga naik pelan dan terduga. Penghasilan masih "
+      "sempat menyesuaikan, daya beli terjaga.", kecil=True)
+kartu(c, "Terlalu tinggi · di atas 3,5%",
+      "Harga melaju", "Uang yang sama membeli lebih sedikit. Keluarga "
+      "berpenghasilan tetap paling terasa dampaknya.", kecil=True)
+
+istilah(
+    f"<b>Acuannya dari mana?</b> Pemerintah menetapkan sasaran inflasi "
+    f"<b>{angka(SASARAN_TENGAH, 1)}% dengan batas ±1%</b>, yaitu rentang "
+    f"{angka(SASARAN_BAWAH, 1)}% sampai {angka(SASARAN_ATAS, 1)}%, untuk "
+    "tahun 2025 sampai 2027 (PMK No. 31 Tahun 2024). Sasaran itu untuk "
+    "inflasi seluruh Indonesia; di dashboard ini dipakai sebagai pembanding "
+    "bagi Bojonegoro.")
+
+istilah(
+    "<b>Tiga cara membaca angka inflasi.</b><br>"
+    "• <b>Sebulan</b> (m-to-m): harga bulan ini dibanding bulan lalu. "
+    "Cocok untuk melihat kejutan sesaat, misalnya menjelang hari raya.<br>"
+    "• <b>Setahun</b> (y-on-y): harga bulan ini dibanding bulan yang sama "
+    "tahun lalu. Inilah angka yang dipakai untuk menilai sasaran.<br>"
+    "• <b>Sejak awal tahun</b> (y-to-d): harga bulan ini dibanding Desember "
+    "tahun lalu. Cocok untuk melihat perjalanan sepanjang tahun berjalan.")
+
+# --------------------------------------------------------------------------
+# Peta dashboard
+# --------------------------------------------------------------------------
+bagian("Mulai dari mana", "Lima halaman, lima pertanyaan",
+       "Pilih halaman di menu sebelah kiri. Urutannya mengikuti alur berpikir: "
+       "dari melihat, mencari sebab, memperkirakan, sampai mengambil keputusan.")
 
 h1, h2, h3 = st.columns(3)
-kartu(h1, "Halaman 1 · Inflasi", "Seberapa tinggi?",
-      "Perkembangan inflasi umum dan kelompok pengeluaran mana yang "
-      "paling menyumbang kenaikannya.", kecil=True)
-kartu(h2, "Halaman 2 · Harga Pangan", "Apa penggeraknya?",
-      "Harga komoditas pangan di pasar, komoditas mana yang paling "
-      "bergejolak, dan kaitannya dengan angka inflasi resmi.", kecil=True)
-kartu(h3, "Halaman 3 · Peramalan", "Ke mana arahnya?",
-      "Proyeksi harga beberapa bulan ke depan beserta ukuran "
-      "ketepatannya.", kecil=True)
-
+kartu(h1, "1 · Inflasi", "Seberapa tinggi?",
+      "Perjalanan inflasi dari waktu ke waktu, dan jenis pengeluaran apa "
+      "(makanan, transportasi, dan lainnya) yang paling mendorongnya.",
+      kecil=True)
+kartu(h2, "2 · Harga Pangan", "Apa penggeraknya?",
+      "Harga bahan pangan di pasar, mana yang paling naik-turun, dan apakah "
+      "benar sejalan dengan angka resmi BPS.", kecil=True)
+kartu(h3, "3 · Peramalan", "Ke mana arahnya?",
+      "Perkiraan harga beberapa bulan ke depan, lengkap dengan uji "
+      "ketepatannya. Bisa juga memakai data yang kamu unggah sendiri.",
+      kecil=True)
 st.markdown("")
-st.caption("Pilih halaman pada menu di sebelah kiri.")
-
-# --------------------------------------------------------------------------
-# Cakupan data
-# --------------------------------------------------------------------------
-bagian("Cakupan", "Data yang dipakai",
-       "Dua sumber berbeda disatukan pada kunci yang sama, yaitu bulan.")
-
-c1, c2, c3 = st.columns(3)
-kartu(c1, "Statistik inflasi — BPS Kabupaten Bojonegoro",
-      f"{inflasi.periode.nunique()} bulan",
-      f"{inflasi.kelompok.nunique()} kelompok pengeluaran · "
-      f"{nama_bulan(inflasi.periode.min())} – {nama_bulan(inflasi.periode.max())}")
-kartu(c2, "Harga pasar — SISKAPERBAPO Jawa Timur",
-      f"{harga.periode.nunique()} bulan",
-      f"{harga.komoditas.nunique()} komoditas · "
-      f"{nama_bulan(harga.periode.min())} – {nama_bulan(harga.periode.max())}")
-kartu(c3, "Bulan yang beririsan", f"{len(jembatan)} bulan",
-      "periode saat kedua sumber sama-sama tersedia, dipakai untuk "
-      "menguji hubungan antarkeduanya")
+h4, h5, _ = st.columns(3)
+kartu(h4, "4 · Kesimpulan", "Apa artinya, apa yang dilakukan?",
+      "Temuan utama, gerak inflasi yang bisa diputar ulang, dan bahan "
+      "pertimbangan kebijakan.", kecil=True)
+kartu(h5, "5 · Metode", "Bagaimana dihitung?",
+      "Sumber data, rumus, dan cara pengujian, supaya semua angka bisa "
+      "ditelusuri dan dipertanggungjawabkan.", kecil=True)
 
 sumber(
     "Sumber — Inflasi: Berita Resmi Statistik, BPS Kabupaten Bojonegoro. "
     "Harga: Sistem Informasi Ketersediaan dan Perkembangan Harga Bahan Pokok "
-    "(SISKAPERBAPO), Dinas Perindustrian dan Perdagangan Provinsi Jawa Timur.")
+    "(SISKAPERBAPO), Dinas Perindustrian dan Perdagangan Provinsi Jawa Timur. "
+    "Sasaran inflasi: Peraturan Menteri Keuangan No. 31 Tahun 2024.")

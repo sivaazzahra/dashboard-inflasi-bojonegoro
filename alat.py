@@ -12,8 +12,11 @@ warna atau sumber data) cukup diubah di sini, tidak di tiap halaman.
 import base64
 from pathlib import Path
 
+import html as _html
+
 import pandas as pd
 import streamlit as st
+import streamlit.components.v1 as komponen
 
 AKAR = Path(__file__).resolve().parent
 SIAP = AKAR / "data" / "siap"
@@ -57,6 +60,22 @@ PENDEK = {
     "Penyediaan Makanan dan Minuman/Restoran": "Restoran",
     "Perawatan Pribadi dan Jasa Lainnya": "Perawatan Pribadi",
 }
+
+
+# --------------------------------------------------------------------------
+# Sasaran inflasi
+# --------------------------------------------------------------------------
+# Peraturan Menteri Keuangan No. 31 Tahun 2024: sasaran inflasi IHK tahunan
+# (year-on-year) 2,5% dengan deviasi 1,0% untuk tahun 2025, 2026, dan 2027.
+# Sasaran ini berlaku untuk inflasi nasional. Di dashboard ini dipakai sebagai
+# acuan pembanding bagi Kabupaten Bojonegoro, bukan sebagai target resmi daerah.
+SASARAN_TENGAH = 2.5
+SASARAN_BAWAH = 1.5
+SASARAN_ATAS = 3.5
+CATATAN_SASARAN = (
+    "Sasaran inflasi 2,5% ± 1% (rentang 1,5%–3,5%) untuk 2025–2027 mengacu "
+    "pada PMK No. 31 Tahun 2024 dan berlaku untuk inflasi nasional. Di sini "
+    "dipakai sebagai pembanding bagi Bojonegoro. Data realisasi: BPS.")
 
 BULAN_ID = ["Januari", "Februari", "Maret", "April", "Mei", "Juni",
             "Juli", "Agustus", "September", "Oktober", "November", "Desember"]
@@ -255,10 +274,10 @@ button[data-testid="stExpandSidebarButton"] span { color: %(aksen)s !important; 
     line-height: 1.35; margin-bottom: 8px; min-height: 2.1em;
 }
 .kartu .nilai {
-    font-size: 1.72rem; font-weight: 700; color: %(tinta)s;
-    line-height: 1.1; letter-spacing: -0.02em;
+    font-size: clamp(1.25rem, 2.1vw, 1.72rem); font-weight: 700; color: %(tinta)s;
+    line-height: 1.1; letter-spacing: -0.02em; white-space: nowrap;
 }
-.kartu .nilai.kecil { font-size: 1.12rem; line-height: 1.25; }
+.kartu .nilai.kecil { font-size: 1.12rem; line-height: 1.25; white-space: normal; }
 .kartu .ket { font-size: 0.74rem; color: %(redup)s; margin-top: 7px; line-height: 1.4; }
 
 /* Kotak bacaan singkat */
@@ -308,6 +327,61 @@ button[data-testid="stExpandSidebarButton"] span { color: %(aksen)s !important; 
 [data-testid="stSidebarNav"] a:hover { background: rgba(255,255,255,0.12); }
 [data-testid="stSidebarNav"] a[aria-current="page"] { background: #2a78d6; font-weight: 600; box-shadow: 0 1px 3px rgba(0,0,0,0.25); }
 [data-testid="stSidebar"] img { background: #fff; border-radius: 10px; padding: 5px 8px; }
+
+/* Perbaikan kontras di menu samping: tulisan di kotak putih harus gelap */
+[data-testid="stSidebarCollapseButton"] button, [data-testid="stSidebarCollapseButton"] button * { color: #123a6b !important; }
+[data-testid="stSidebar"] [data-baseweb="select"] > div { background: #fff; }
+[data-testid="stSidebar"] [data-baseweb="select"] div, [data-testid="stSidebar"] [data-baseweb="select"] input,
+[data-testid="stSidebar"] [data-baseweb="select"] svg { color: #101828 !important; fill: #101828 !important; }
+[data-testid="stSidebar"] [data-baseweb="tag"], [data-testid="stSidebar"] [data-baseweb="tag"] * { color: #fff !important; }
+
+/* Sentuhan tampilan: kartu sedikit terangkat saat disentuh, garis aksen di
+   atas kartu, dan judul kepala yang mengecil di layar sempit */
+.kartu { border-top: 3px solid %(seri1)s; transition: transform .15s ease, box-shadow .15s ease; }
+.kartu:hover { transform: translateY(-2px); box-shadow: 0 6px 16px rgba(16,24,40,0.10); }
+.bagian h2 { padding-left: 10px; border-left: 4px solid %(seri2)s; }
+@media (max-width: 760px) {
+    .kepala { padding: 20px 18px; }
+    .kepala h1 { font-size: 1.4rem; }
+    .logo-baris img { height: 40px; }
+}
+
+/* Kontras menu samping: tulisan di dalam kotak putih harus gelap */
+[data-testid="stSidebarCollapseButton"] button { background: rgba(255,255,255,0.16) !important; border: none !important; box-shadow: none !important; }
+[data-testid="stSidebarCollapseButton"] button, [data-testid="stSidebarCollapseButton"] button * { color: #ffffff !important; }
+[data-testid="stSidebar"] [data-baseweb="select"] > div { background: #fff; }
+[data-testid="stSidebar"] [data-baseweb="select"] div, [data-testid="stSidebar"] [data-baseweb="select"] input,
+[data-testid="stSidebar"] [data-baseweb="select"] svg { color: #101828 !important; fill: #101828 !important; }
+[data-testid="stSidebar"] [data-baseweb="tag"], [data-testid="stSidebar"] [data-baseweb="tag"] * { color: #fff !important; }
+[data-testid="stSidebar"] [data-testid="stFileUploader"] section { background: rgba(255,255,255,0.10); }
+[data-testid="stSidebar"] [data-testid="stFileUploader"] small, [data-testid="stSidebar"] [data-testid="stFileUploader"] span { color: #fff; }
+
+/* Ikon dua menu tambahan */
+[data-testid="stSidebarNav"] li:nth-child(5) a { --ikon: url("data:image/svg+xml,%%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%%3E%%3Cpath d='M9 11l3 3L22 4'/%%3E%%3Cpath d='M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11'/%%3E%%3C/svg%%3E"); }
+[data-testid="stSidebarNav"] li:nth-child(6) a { --ikon: url("data:image/svg+xml,%%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%%3E%%3Cpath d='M4 19.5A2.5 2.5 0 0 1 6.5 17H20'/%%3E%%3Cpath d='M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z'/%%3E%%3C/svg%%3E"); }
+
+/* Gerak halus saat halaman dibuka */
+@keyframes naik-pelan { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+.kartu, .wawasan, .bacaan, .istilah, .bagian { animation: naik-pelan .5s ease both; }
+
+/* Ikon info (i) dengan penjelasan saat disentuh */
+.info { display: inline-flex; align-items: center; justify-content: center;
+    width: 18px; height: 18px; border-radius: 50%%; background: #e8f0fb;
+    color: %(seri1)s; font-size: 11px; font-weight: 700; cursor: help;
+    position: relative; margin-left: 8px; vertical-align: middle;
+    letter-spacing: 0; text-transform: none; font-style: normal; }
+.info::after { content: attr(data-tip); position: absolute; left: 50%%; bottom: 140%%;
+    transform: translateX(-50%%); width: 270px; background: #101828; color: #fff;
+    padding: 9px 12px; border-radius: 9px; font-size: .76rem; font-weight: 400;
+    line-height: 1.5; opacity: 0; pointer-events: none; transition: opacity .15s;
+    z-index: 60; text-align: left; box-shadow: 0 6px 18px rgba(16,24,40,.25); }
+.info:hover::after, .info:focus::after { opacity: 1; }
+.catatan-kaki { font-size: .74rem; color: %(redup)s; margin: 6px 2px 0 2px; line-height: 1.55; }
+.pil { display: inline-block; padding: 3px 10px; border-radius: 999px; font-size: .74rem; font-weight: 600; }
+.pil.hijau { background: #e3f6ec; color: #17784f; }
+.pil.biru { background: #e4effc; color: #1d5aa8; }
+.pil.merah { background: #fbe7e7; color: #a82a2a; }
+.pil.abu { background: #eef0f3; color: #55606e; }
 </style>
 """ % WARNA
 
@@ -383,8 +457,8 @@ def kepala(judul: str, penjelasan: str, lencana: str = "",
     gambar = berkas_logo(latar) if latar else None
     gaya_latar = (
         'style="background-image: linear-gradient(100deg, '
-        'rgba(18,58,107,0.96) 0%, rgba(18,58,107,0.84) 48%, '
-        f'rgba(29,90,168,0.40) 100%), url(\'{gambar}\'); '
+        'rgba(18,58,107,0.80) 0%, rgba(18,58,107,0.52) 42%, '
+        f'rgba(29,90,168,0.06) 100%), url(\'{gambar}\'); '
         'background-size: cover; background-position: center;"'
         if gambar else "")
     st.markdown(
@@ -417,15 +491,11 @@ HALAMAN = [("Beranda.py", "Beranda"),
 
 
 def navigasi() -> None:
-    """Deretan tautan antarhalaman, dipasang di bawah kepala tiap halaman.
-
-    Menu samping Streamlit menyembunyikan dirinya sendiri pada layar yang
-    dianggap sempit, dan pembaca yang baru pertama membuka dashboard belum
-    tentu menemukannya. Tautan di badan halaman membuat seluruh halaman
-    selalu terjangkau, apa pun ukuran layarnya.
-    """
-    for kolom, (berkas, label) in zip(st.columns(len(HALAMAN)), HALAMAN):
-        kolom.page_link(berkas, label=label, use_container_width=True)
+    """Dulu menampilkan deretan tautan halaman di bawah kepala. Sekarang
+    dikosongkan karena menu samping sudah memuat tautan yang sama dan
+    deretan ini hanya membuat menu tampil dua kali. Fungsinya dibiarkan
+    ada supaya semua halaman tetap bisa memanggilnya."""
+    return None
 
 
 def bagian(mata: str, judul: str, penjelasan: str = "") -> None:
@@ -511,3 +581,153 @@ def gaya_titik(fig, tinggi: int = 360):
     gaya(fig, tinggi)
     fig.update_layout(hovermode="closest")
     return fig
+
+
+# --------------------------------------------------------------------------
+# Komponen tambahan
+# --------------------------------------------------------------------------
+def info(teks: str) -> str:
+    """Ikon (i) kecil. Saat kursor diarahkan, teks penjelasan muncul.
+    Dipakai di dalam judul bagian: bagian("...", "Judul" + info("...")).
+    """
+    return (f'<span class="info" tabindex="0" '
+            f'data-tip="{_html.escape(teks, quote=True)}">i</span>')
+
+
+def pil(teks: str, warna: str = "biru") -> str:
+    """Lencana kecil berwarna: hijau, biru, merah, atau abu."""
+    return f'<span class="pil {warna}">{teks}</span>'
+
+
+def catatan_kaki(teks: str) -> None:
+    """Catatan kecil di bawah grafik, misalnya sumber acuan."""
+    st.markdown(f'<div class="catatan-kaki">{teks}</div>', unsafe_allow_html=True)
+
+
+def tambah_sasaran(fig):
+    """Menambahkan pita sasaran inflasi 1,5%-3,5% dan tiga garis berlabel.
+
+    Cocok untuk grafik inflasi tahunan (y-on-y), karena sasaran PMK
+    31/2024 dirumuskan pada inflasi tahunan.
+    """
+    hijau = "#1f9d6b"
+    fig.add_hrect(y0=SASARAN_BAWAH, y1=SASARAN_ATAS, line_width=0,
+                  fillcolor="rgba(31,157,107,0.11)", layer="below")
+    for y, label, garis, posisi in [
+            (SASARAN_ATAS, "Batas atas sasaran (3,5%)", "dot", "top left"),
+            (SASARAN_TENGAH, "Sasaran inflasi 2,5% (PMK 31/2024)", "dash", "top left"),
+            (SASARAN_BAWAH, "Batas bawah sasaran (1,5%)", "dot", "bottom left")]:
+        fig.add_hline(y=y, line_width=1.2, line_dash=garis, line_color=hijau,
+                      annotation_text=label, annotation_position=posisi,
+                      annotation_font=dict(size=10.5, color=hijau))
+    return fig
+
+
+def status_sasaran(nilai: float):
+    """(teks, warna lencana) untuk inflasi tahunan terhadap sasaran."""
+    if nilai < SASARAN_BAWAH:
+        return "Di bawah sasaran", "biru"
+    if nilai > SASARAN_ATAS:
+        return "Di atas sasaran", "merah"
+    return "Dalam sasaran", "hijau"
+
+
+_KOMPONEN_DASAR = """
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+* { box-sizing: border-box; }
+body { margin: 0; font-family: 'Plus Jakarta Sans', system-ui, sans-serif; background: transparent; }
+</style>
+"""
+
+_ANGKA_GERAK = _KOMPONEN_DASAR + """
+<style>
+.baris { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
+.k { background: #fff; border: 1px solid #e6e8ec; border-top: 3px solid #2a78d6; border-radius: 14px;
+     padding: 14px 16px; box-shadow: 0 1px 2px rgba(16,24,40,.04); }
+.k .l { font-size: 12px; color: #55606e; font-weight: 500; margin-bottom: 6px; line-height: 1.35; }
+.k .n { font-size: 30px; font-weight: 800; color: #123a6b; letter-spacing: -0.02em; line-height: 1.1; white-space: nowrap; }
+.k .t { font-size: 11.5px; color: #8a94a3; margin-top: 6px; line-height: 1.4; }
+</style>
+<div class="baris">__ISI__</div>
+<script>
+const fmt = (v, d) => v.toLocaleString('id-ID', {minimumFractionDigits: d, maximumFractionDigits: d});
+document.querySelectorAll('.n').forEach(el => {
+  const akhir = parseFloat(el.dataset.nilai), d = parseInt(el.dataset.desimal),
+        awal = el.dataset.awalan || '', akh = el.dataset.akhiran || '';
+  const mulai = performance.now(), lama = 1400;
+  function langkah(t) {
+    const p = Math.min((t - mulai) / lama, 1), e = 1 - Math.pow(1 - p, 3);
+    el.textContent = awal + fmt(akhir * e, d) + akh;
+    if (p < 1) requestAnimationFrame(langkah);
+  }
+  requestAnimationFrame(langkah);
+});
+</script>
+"""
+
+_PENGUKUR = _KOMPONEN_DASAR + """
+<div style="background:#fff;border:1px solid #e6e8ec;border-radius:16px;padding:14px 10px 10px 10px;
+     box-shadow:0 1px 2px rgba(16,24,40,.04);text-align:center">
+  <div style="font-size:12px;color:#55606e;font-weight:600;letter-spacing:.04em;text-transform:uppercase">__JUDUL__</div>
+  <svg id="s" viewBox="0 0 360 215" width="100%" style="max-width:420px"></svg>
+  <div id="status" style="margin-top:-4px;font-size:13px;font-weight:700;color:__WARNASTATUS__">__STATUS__</div>
+  <div style="font-size:11.5px;color:#8a94a3;margin-top:4px">__KET__</div>
+</div>
+<script>
+const MIN = -1, MAX = 6, NILAI = __NILAI__, W = 360, cx = 180, cy = 175, r = 135, tebal = 24;
+const ang = v => Math.PI * (1 - (Math.min(Math.max(v, MIN), MAX) - MIN) / (MAX - MIN));
+const pt = (rad, a) => [cx + rad * Math.cos(a), cy - rad * Math.sin(a)];
+const busur = (v1, v2, w) => { const [x1, y1] = pt(r, ang(v1)), [x2, y2] = pt(r, ang(v2));
+  return `<path d="M${x1} ${y1} A${r} ${r} 0 0 1 ${x2} ${y2}" stroke="${w}" stroke-width="${tebal}" fill="none"/>`; };
+let svg = busur(MIN, 1.5, '#2a78d6') + busur(1.5, 3.5, '#1f9d6b') + busur(3.5, MAX, '#d03b3b');
+[[0,'0%'],[1.5,'1,5%'],[2.5,'2,5%'],[3.5,'3,5%'],[5,'5%']].forEach(([v, t]) => {
+  const [x, y] = pt(r + 22, ang(v)); svg += `<text x="${x}" y="${y}" font-size="10.5" fill="#55606e" text-anchor="middle" dominant-baseline="middle">${t}</text>`; });
+svg += '<line id="j" x1="'+cx+'" y1="'+cy+'" x2="'+cx+'" y2="'+(cy-r+12)+'" stroke="#101828" stroke-width="3.5" stroke-linecap="round"/>';
+svg += `<circle cx="${cx}" cy="${cy}" r="9" fill="#101828"/>`;
+svg += `<text id="v" x="${cx}" y="${cy+36}" font-size="30" font-weight="800" fill="#123a6b" text-anchor="middle">0,00%</text>`;
+document.getElementById('s').innerHTML = svg;
+const j = document.getElementById('j'), v = document.getElementById('v');
+const fmt = x => x.toLocaleString('id-ID', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+const mulai = performance.now(), lama = 1800;
+function langkah(t) {
+  const p = Math.min((t - mulai) / lama, 1), e = 1 - Math.pow(1 - p, 3);
+  const nilai = MIN + (NILAI - MIN) * e, a = ang(nilai), [x, y] = pt(r - 12, a);
+  j.setAttribute('x2', x); j.setAttribute('y2', y);
+  v.textContent = (NILAI >= 0 ? '+' : '') + fmt(NILAI * e) + '%';
+  if (p < 1) requestAnimationFrame(langkah);
+}
+requestAnimationFrame(langkah);
+</script>
+"""
+
+
+def angka_gerak(daftar: list, tinggi: int = 135) -> None:
+    """Deretan kartu angka yang menghitung naik dari nol saat halaman dibuka.
+
+    Tiap butir berupa kamus: label, nilai, desimal, awalan, akhiran, ket.
+    Digambar di dalam komponen HTML karena Streamlit tidak menjalankan
+    skrip pada st.markdown.
+    """
+    isi = ""
+    for d in daftar:
+        isi += (f'<div class="k"><div class="l">{_html.escape(d["label"])}</div>'
+                f'<div class="n" data-nilai="{d["nilai"]}" '
+                f'data-desimal="{d.get("desimal", 0)}" '
+                f'data-awalan="{_html.escape(d.get("awalan", ""))}" '
+                f'data-akhiran="{_html.escape(d.get("akhiran", ""))}">0</div>'
+                f'<div class="t">{_html.escape(d.get("ket", ""))}</div></div>')
+    komponen.html(_ANGKA_GERAK.replace("__ISI__", isi), height=tinggi)
+
+
+def pengukur_sasaran(nilai: float, judul: str, ket: str, tinggi: int = 285) -> None:
+    """Pengukur setengah lingkaran: jarum bergerak ke nilai inflasi tahunan,
+    dengan tiga zona (di bawah, dalam, di atas sasaran)."""
+    teks, warna = status_sasaran(nilai)
+    kode = {"hijau": "#17784f", "biru": "#1d5aa8", "merah": "#a82a2a"}[warna]
+    html = (_PENGUKUR.replace("__NILAI__", repr(float(nilai)))
+            .replace("__JUDUL__", _html.escape(judul))
+            .replace("__STATUS__", _html.escape(teks))
+            .replace("__WARNASTATUS__", kode)
+            .replace("__KET__", _html.escape(ket)))
+    komponen.html(html, height=tinggi)
