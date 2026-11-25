@@ -298,6 +298,23 @@ st.caption("RMSE dan MAE dalam rupiah, jadi hanya berlaku untuk komoditas "
            "ini. MAPE dalam persen, jadi bisa dibandingkan antarkomoditas. "
            "Karena itu pemenang ditentukan dari MAPE (makin kecil makin baik).")
 
+istilah(
+    "<b>Cara membaca tabel peringkat.</b> Baris teratas adalah cara yang "
+    f"paling tepat <i>pada ujian</i> (MAPE terkecil). Pemenang ujian: "
+    f"<b>{terbaik['Metode']}</b>. Metode yang dipakai untuk meramal ke depan: "
+    f"<b>{hasil['metode_ramalan']}</b>."
+    + (f"<br><b>Kenapa keduanya berbeda?</b> '{PEMBANDING}' hanyalah "
+       "tolok ukur: ia menebak harga bulan depan sama dengan harga bulan yang "
+       "sama tahun lalu. Cara itu tidak punya arah tren dan tidak bisa "
+       "menghitung rentang kemungkinan, jadi tidak cocok sebagai alat meramal. "
+       f"Karena itu ramalan memakai metode statistik terbaik berikutnya "
+       f"({hasil['metode_ramalan']}). Tetapi karena metode statistik itu "
+       f"<b>kalah tepat</b> dari sekadar menyalin harga tahun lalu, anggap ramalan "
+       "di bawah sebagai gambaran kasar dan bandingkan dengan garis abu-abu "
+       "putus-putus (harga tahun lalu) pada grafik proyeksi."
+       if terbaik["Metode"] == PEMBANDING and hasil["metode_ramalan"] != PEMBANDING
+       else ""))
+
 mae_b, rmse_b = terbaik["MAE"], terbaik["RMSE"]
 rasio = rmse_b / mae_b if mae_b else 1.0
 istilah(
@@ -415,10 +432,28 @@ fig.add_trace(go.Scatter(
                                     dash="dash"),
     marker=dict(size=7),
     hovertemplate="ramalan Rp %{y:,.0f}<extra></extra>"))
+if terbaik["Metode"] == PEMBANDING:
+    # Garis pembanding: harga bulan yang sama tahun lalu
+    peta = deret_df.set_index("periode")["harga"]
+    tahun_lalu = [peta.get(t - pd.DateOffset(years=1)) for t in ramalan["periode"]]
+    if all(v is not None for v in tahun_lalu):
+        fig.add_trace(go.Scatter(
+            x=ramalan["periode"], y=tahun_lalu, name="Harga tahun lalu (pembanding)",
+            mode="lines", line=dict(color=WARNA["redup"], width=2, dash="dot"),
+            hovertemplate="tahun lalu Rp %{y:,.0f}<extra></extra>"))
 fig.add_vline(x=deret_df["periode"].iloc[-1], line_width=1, line_dash="dot",
               line_color=WARNA["redup"])
 fig.update_yaxes(tickprefix="Rp ", separatethousands=True)
 st.plotly_chart(gaya(fig, 400), use_container_width=True)
+istilah(
+    "<b>Cara membaca grafik.</b> Garis <b>hitam</b> adalah harga yang "
+    "sudah tercatat. Garis <b>biru putus-putus</b> adalah ramalan. Pita "
+    "<b>biru muda</b> adalah rentang kemungkinan 80%: harga sebenarnya "
+    "diperkirakan jatuh di dalam pita itu. Pita yang melebar ke kanan "
+    "berarti makin jauh ke depan, makin tidak pasti. Garis tegak titik-titik "
+    "menandai batas antara data dan ramalan."
+    + (" Garis <b>abu-abu putus-putus</b> adalah harga bulan yang sama tahun "
+       "lalu, sebagai pembanding." if terbaik["Metode"] == PEMBANDING else ""))
 
 lebar_awal = (ramalan["atas"].iloc[0] - ramalan["bawah"].iloc[0]) / harga_kini * 100
 lebar_akhir = (ramalan["atas"].iloc[-1] - ramalan["bawah"].iloc[-1]) / harga_kini * 100

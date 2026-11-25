@@ -229,6 +229,24 @@ fig = go.Figure(go.Heatmap(
 fig.update_yaxes(type="category", dtick=1)   # tampilkan semua tahun
 st.plotly_chart(gaya_titik(fig, 40 + 42 * len(kisi)), use_container_width=True)
 
+n_sel = int(kisi.notna().sum().sum())
+n_nol = int((kisi.abs() < 0.005).sum().sum())
+istilah(
+    "<b>Cara membaca warnanya.</b><br>"
+    "• <b>Merah tua</b>: harga naik tajam pada bulan itu. "
+    "<b>Merah muda atau pink</b>: naik sedikit.<br>"
+    "• <b>Biru tua</b>: harga turun tajam. <b>Biru muda</b>: turun sedikit.<br>"
+    "• <b>Abu-abu atau putih keabu-abuan</b>: harga hampir tidak berubah "
+    "dibanding bulan sebelumnya.<br>"
+    "• <b>Kotak kosong</b>: tidak ada data pada bulan itu.<br>"
+    "Cara memakainya: lihat satu kolom (satu bulan) dari atas ke bawah. "
+    "Kalau warnanya sering sama di kolom itu, berarti ada kebiasaan musiman. "
+    "Arahkan kursor ke kotak untuk melihat angka persisnya."
+    + (f"<br><b>Catatan:</b> {n_nol} dari {n_sel} kotak ({n_nol / max(n_sel, 1) * 100:.0f}%) "
+       f"harganya tidak berubah sama sekali, sehingga polanya sulit terbaca. "
+       "Biasanya itu tanda harga di sumber data jarang diperbarui, bukan "
+       "tanda harga benar-benar tetap." if n_nol / max(n_sel, 1) >= 0.4 else ""))
+
 rata_bulan = musim.groupby("bulan_ke")["perubahan_mom_pct"].mean()
 if rata_bulan.notna().any():
     bl_naik, bl_turun = rata_bulan.idxmax(), rata_bulan.idxmin()
@@ -290,6 +308,21 @@ with kanan:
           "setiap 1% kenaikan harga pangan di pasar sejalan dengan kenaikan "
           f"harga makanan versi BPS sekitar {angka(kemiringan, 2)} persen",
           kecil=True)
+
+istilah(
+    "<b>Cara membaca grafik titik di kiri.</b><br>"
+    "• Setiap <b>titik biru</b> adalah satu bulan. Posisi ke kanan berarti "
+    "harga pangan di pasar naik; posisi ke atas berarti harga makanan "
+    "versi BPS naik.<br>"
+    "• <b>Garis putus-putus jingga</b> adalah garis kecenderungan: arah umum "
+    "hubungan keduanya. Makin banyak titik yang menempel ke garis itu, makin "
+    "seirama kedua angka.<br>"
+    "• Titik di <b>kanan atas</b> adalah bulan ketika harga pasar dan angka BPS "
+    "sama-sama naik; titik di <b>kiri bawah</b> sama-sama turun. Titik yang "
+    "<b>jauh dari garis</b> adalah bulan ketika keduanya tidak sepakat.<br>"
+    "• Garis tegak di angka 0% memisahkan bulan harga pasar naik (kanan) dan "
+    "turun (kiri), dan garis datar di 0% memisahkan kenaikan dan penurunan "
+    "harga makanan versi BPS.")
 
 bacaan(
     f"Keeratan hubungannya <b>{angka(r, 3, tanda=True)}</b>, tergolong "
